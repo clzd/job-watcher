@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && out=$(npm test --silent 2>&1) || { printf '%s\\n' \"$out\" | tail -n 40 >&2; exit 2; }"
+          }
+        ]
+      }
+    ]
+  }
+}
