@@ -31,6 +31,8 @@ In a second terminal, trigger the cron by hand:
 
 ## Test
 
+Needs Node 22 or newer.
+
     npm test
 
 ## License
