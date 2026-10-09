@@ -12,3 +12,7 @@ id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
 [observability]
 enabled = true
+
+# Traces would record the Adzuna and Telegram URLs, which carry secrets.
+[observability.traces]
+enabled = false
