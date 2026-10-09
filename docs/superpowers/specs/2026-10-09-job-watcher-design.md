@@ -54,7 +54,7 @@ Search terms live as a constant array in code:
 4. Diff against KV: keep only postings whose `id` is not a key in `SEEN_JOBS`.
 5. If the new list is empty, stop.
 6. Format and send one Telegram message.
-7. Only after Telegram returns success, write each new `id` to KV with a 60-day TTL (`expirationTtl: 5184000`). Writing after sending means a failed send retries next run instead of silently losing postings.
+7. Only after Telegram accepts a message part, write that part's `id`s to KV with a 60-day TTL (`expirationTtl: 5184000`). Writing after sending means a failed send retries next run instead of silently losing postings.
 
 ## Filters
 
@@ -101,8 +101,8 @@ Rules:
 ## Error handling
 
 - One Adzuna search failing (non-2xx or network error) is logged with `console.error` and skipped. The other searches still run.
-- All seven searches failing ends the run with no message and nothing written to KV.
-- Telegram failing (non-2xx) throws, so the run shows as failed in the Cloudflare dashboard and KV is not updated. The next run resends the same postings.
+- All seven searches failing throws `All Adzuna searches failed`, so the run shows as failed in the dashboard. No message, nothing written to KV. This makes a wrong key, an exhausted quota, or an outage visible instead of looking like a quiet day.
+- Telegram failing (non-2xx) throws, so the run shows as failed in the Cloudflare dashboard. Ids are marked seen per message part, right after that part is accepted, so a failure on part 2 leaves part 1 marked and only the unsent parts resend next run.
 - KV read errors throw. KV write errors after a successful send are logged but do not throw, since the message already went out.
 
 ## Project layout
@@ -119,10 +119,10 @@ job-watcher/
   wrangler.toml
   src/
     index.js                 scheduled() handler, orchestrates the run
-    adzuna.js                buildUrl(term, env), fetchSearch(term, env)
+    adzuna.js                buildUrl(term, env), fetchSearch(term, env) -> results[] or null on failure
     filters.js               passesTitleFilter(job), passesLocationFilter(job)
     seen.js                  findNew(jobs, kv), markSeen(jobs, kv)
-    telegram.js              formatMessage(jobs), splitMessage(text), send(text, env)
+    telegram.js              formatMessage(jobs), splitMessage(text), formatMessages(jobs) -> [{ text, jobs }], send(text, env)
   test/
     filters.test.js
     seen.test.js
@@ -142,7 +142,7 @@ Coverage required:
 - `filters.test.js`: title filter drops `Intern`, `INTERN`, `Junior Developer`, `Web Manager (Intern)`; keeps `Senior Web Manager`, `International Web Manager`, `Internal Tools Manager`. Location filter keeps remote in title, remote in display_name, Florida in area, `, FL` suffix; drops `Austin, Texas` with no remote mention.
 - `seen.test.js`: `findNew` returns only postings absent from a fake KV (an object with `get` and `put` backed by a `Map`). `markSeen` writes each id with `expirationTtl` of 5184000.
 - `telegram.test.js`: `formatMessage` produces the exact expected text for a posting with full salary, one with only `salary_min`, one with no salary and no company. `splitMessage` leaves short text as one message and splits a long one at posting boundaries, each part under 4096 characters. `send` calls `fetch` with the right URL, method, and JSON body, and throws on non-2xx, using a mocked `globalThis.fetch`.
-- `adzuna.test.js`: `buildUrl` includes every required query parameter and URL-encodes the search term. `fetchSearch` returns `results` on 200 and returns an empty array (after logging) on a 500, with `fetch` mocked.
+- `adzuna.test.js`: `buildUrl` includes every required query parameter and URL-encodes the search term. `fetchSearch` returns `results` on 200 and returns `null` (after logging) on a 500, a thrown fetch, or invalid JSON, with `fetch` mocked.
 
 `fetch` is mocked by assigning `globalThis.fetch` in a `before` hook and restoring it in `after`.
 
