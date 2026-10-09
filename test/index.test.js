@@ -2,8 +2,9 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import worker, { run, SEARCH_TERMS } from "../src/index.js";
 import { fakeKv } from "./helpers.js";
+import { formatMessages } from "../src/telegram.js";
 
-// adzunaStatus may be a number or a function of the 0-based Adzuna call index.
+// adzunaStatus and telegramStatus may each be a number or a function of the 0-based call index.
 function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = {}) {
   const calls = { adzuna: [], telegram: [] };
   globalThis.fetch = async (url, options) => {
@@ -15,8 +16,9 @@ function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = 
       return new Response(JSON.stringify({ results }), { status: 200 });
     }
     if (u.startsWith("https://api.telegram.org/")) {
+      const status = typeof telegramStatus === "function" ? telegramStatus(calls.telegram.length) : telegramStatus;
       calls.telegram.push(JSON.parse(options.body));
-      return new Response(telegramStatus === 200 ? '{"ok":true}' : '{"ok":false}', { status: telegramStatus });
+      return new Response(status === 200 ? '{"ok":true}' : '{"ok":false}', { status });
     }
     throw new Error(`unexpected fetch ${u}`);
   };
@@ -138,6 +140,26 @@ test("run throws and leaves KV untouched when Telegram rejects the message", asy
 
   await assert.rejects(run(makeEnv(kv)), /Telegram sendMessage failed: 500/);
   assert.equal(kv.puts.length, 0);
+});
+
+test("run marks each message part seen only after that part is sent", async () => {
+  const jobs = Array.from({ length: 80 }, (_, i) => ({
+    ...remoteJob,
+    id: 1000 + i,
+    title: `Web Platform Manager ${i} ${"x".repeat(120)}`,
+    redirect_url: `https://www.adzuna.com/land/ad/${1000 + i}`,
+  }));
+  const parts = formatMessages(jobs);
+  assert.ok(parts.length > 1, "fixture must need several parts");
+  const calls = fakeFetch({ results: jobs, telegramStatus: (i) => (i === 0 ? 200 : 500) });
+  const kv = fakeKv();
+
+  await assert.rejects(run(makeEnv(kv)), /Telegram sendMessage failed: 500/);
+  assert.equal(calls.telegram.length, 2);
+  assert.deepEqual(
+    kv.puts.map((p) => p.key),
+    parts[0].jobs.map((j) => String(j.id)),
+  );
 });
 
 test("scheduled handler awaits run", async () => {

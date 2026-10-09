@@ -30,31 +30,56 @@ export function formatMessage(jobs) {
   return [`New jobs (${jobs.length})`, ...jobs.map(formatJob)].join("\n\n");
 }
 
-export function splitMessage(text, limit = TELEGRAM_LIMIT) {
-  if (text.length <= limit) return [text];
-
-  const [header, ...blocks] = text.split("\n\n");
+// Greedily packs blocks into groups that fit under limit once a part header is added.
+// Returns arrays of block indexes so callers can map them back to blocks or jobs.
+function packBlocks(header, blocks, limit) {
   // Reserve room for the longest plausible part header, e.g. ", part 10 of 10".
   const headerBudget = header.length + ", part 00 of 00".length + 2;
 
   const groups = [];
   let current = [];
   let used = 0;
-  for (const block of blocks) {
+  blocks.forEach((block, index) => {
     const cost = block.length + 2;
     if (current.length > 0 && headerBudget + used + cost > limit) {
       groups.push(current);
       current = [];
       used = 0;
     }
-    current.push(block);
+    current.push(index);
     used += cost;
-  }
+  });
   if (current.length > 0) groups.push(current);
+  return groups;
+}
 
+function partText(header, blocks, i, total) {
+  return [`${header}, part ${i + 1} of ${total}`, ...blocks].join("\n\n");
+}
+
+export function splitMessage(text, limit = TELEGRAM_LIMIT) {
+  if (text.length <= limit) return [text];
+
+  const [header, ...blocks] = text.split("\n\n");
+  const groups = packBlocks(header, blocks, limit);
   return groups.map((group, i) =>
-    [`${header}, part ${i + 1} of ${groups.length}`, ...group].join("\n\n"),
+    partText(header, group.map((index) => blocks[index]), i, groups.length),
   );
+}
+
+// Like splitMessage(formatMessage(jobs)), but each part also carries the jobs it lists,
+// so the caller can mark exactly those jobs seen once that part is sent.
+export function formatMessages(jobs, limit = TELEGRAM_LIMIT) {
+  const text = formatMessage(jobs);
+  if (text.length <= limit) return [{ text, jobs: [...jobs] }];
+
+  const header = `New jobs (${jobs.length})`;
+  const blocks = jobs.map(formatJob);
+  const groups = packBlocks(header, blocks, limit);
+  return groups.map((group, i) => ({
+    text: partText(header, group.map((index) => blocks[index]), i, groups.length),
+    jobs: group.map((index) => jobs[index]),
+  }));
 }
 
 export async function send(text, env) {

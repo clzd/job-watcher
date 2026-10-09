@@ -1,7 +1,7 @@
 import { fetchSearch } from "./adzuna.js";
 import { passesTitleFilter, passesLocationFilter } from "./filters.js";
 import { findNew, markSeen } from "./seen.js";
-import { formatMessage, splitMessage, send } from "./telegram.js";
+import { formatMessages, send } from "./telegram.js";
 
 // Seven terms. Do not add an eighth: 7 x 4 runs x 31 days = 868 of the 1,000 monthly Adzuna calls.
 export const SEARCH_TERMS = [
@@ -38,10 +38,12 @@ export async function run(env) {
     return;
   }
 
-  for (const part of splitMessage(formatMessage(fresh))) {
-    await send(part, env);
+  // Mark each part seen right after it is sent, so a failure on a later part
+  // does not cause an already delivered part to be resent next run.
+  for (const { text, jobs } of formatMessages(fresh)) {
+    await send(text, env);
+    await markSeen(jobs, env.SEEN_JOBS);
   }
-  await markSeen(fresh, env.SEEN_JOBS);
   console.log(`Sent ${fresh.length} new jobs`);
 }
 

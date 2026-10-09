@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { formatJob, formatMessage, splitMessage, send } from "../src/telegram.js";
+import { formatJob, formatMessage, splitMessage, formatMessages, send } from "../src/telegram.js";
 
 const full = {
   id: 1,
@@ -73,13 +73,17 @@ test("splitMessage returns a single part when the text fits", () => {
   assert.deepEqual(splitMessage(text), [text]);
 });
 
-test("splitMessage splits at posting boundaries with part headers and keeps every posting", () => {
-  const jobs = Array.from({ length: 80 }, (_, i) => ({
+function manyJobs(n = 80) {
+  return Array.from({ length: n }, (_, i) => ({
     ...full,
     id: i,
     title: `Web Platform Manager ${i} ${"x".repeat(120)}`,
     redirect_url: `https://www.adzuna.com/land/ad/${i}`,
   }));
+}
+
+test("splitMessage splits at posting boundaries with part headers and keeps every posting", () => {
+  const jobs = manyJobs();
   const text = formatMessage(jobs);
   assert.ok(text.length > 4096, "fixture must exceed the limit");
 
@@ -98,6 +102,27 @@ test("splitMessage splits at posting boundaries with part headers and keeps ever
     }
   });
   assert.equal(seenBlocks, 80);
+});
+
+test("formatMessages returns one entry with the whole message and every job when it fits", () => {
+  const jobs = [full, minOnly, bare];
+  const parts = formatMessages(jobs);
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0].text, formatMessage(jobs));
+  assert.deepEqual(parts[0].jobs, jobs);
+});
+
+test("formatMessages splits a long list into parts that each carry their own jobs", () => {
+  const jobs = manyJobs();
+  const parts = formatMessages(jobs);
+  assert.ok(parts.length > 1);
+  parts.forEach(({ text, jobs: partJobs }, i) => {
+    assert.ok(text.length < 4096, `part ${i + 1} is ${text.length} chars`);
+    assert.ok(text.startsWith(`New jobs (80), part ${i + 1} of ${parts.length}\n\n`), text.slice(0, 40));
+    assert.equal(text, [text.split("\n\n")[0], ...partJobs.map(formatJob)].join("\n\n"));
+  });
+  assert.deepEqual(parts.flatMap((p) => p.jobs), jobs);
+  assert.deepEqual(parts.map((p) => p.text), splitMessage(formatMessage(jobs)));
 });
 
 let realFetch;
