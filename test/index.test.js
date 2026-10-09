@@ -81,6 +81,10 @@ test("run calls Adzuna once per term, sends one message, and marks the job seen 
   await run(makeEnv(kv));
 
   assert.equal(calls.adzuna.length, 7);
+  assert.deepEqual(
+    calls.adzuna.map((u) => new URL(u).searchParams.get("what")),
+    SEARCH_TERMS,
+  );
   assert.equal(calls.telegram.length, 1);
   const text = calls.telegram[0].text;
   assert.ok(text.startsWith("New jobs (1)\n\n"), text);
