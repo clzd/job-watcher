@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Plain JavaScript ESM. No TypeScript, no bundler, no test framework dependency. `package.json` has `"type": "module"`.
-- Node 20+ locally. Only dev dependency is `wrangler`.
+- Node 22+ locally (engines `>=22`; the test glob needs it). Only dev dependency is `wrangler`.
 - Secrets `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` come from `env` only. Never in code, `wrangler.toml`, tests, or logs. Never log a URL that contains `app_key`.
 - Cron is `0 */6 * * *`. Exactly seven search terms. Adding an eighth is forbidden (868 calls/month budget, cap 1,000).
 - Adzuna call: `GET https://api.adzuna.com/v1/api/jobs/us/search/1` with `app_id`, `app_key`, `what`, `results_per_page=50`, `sort_by=date`, `content-type=application/json`.
@@ -75,10 +75,10 @@ skills-lock.json
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test \"test/*.test.js\"",
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy"
   },

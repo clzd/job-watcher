@@ -14,7 +14,7 @@ Email, polling company career boards, cover letters, scoring or ranking, any UI.
 
 ## Runtime and budget
 
-- Cloudflare Worker, plain JavaScript (ESM), no bundler or TypeScript. Node 20+ locally for tests.
+- Cloudflare Worker, plain JavaScript (ESM), no bundler or TypeScript. Node 22+ locally for tests (the test script uses a glob argument, which needs Node 21 or later).
 - Cron: `0 */6 * * *` (00:00, 06:00, 12:00, 18:00 UTC). That is 8pm, 2am, 8am, 2pm Eastern during daylight time, one hour later in standard time.
 - Adzuna budget: 7 searches x 4 runs x 31 days = 868 calls a month, under the 1,000 free-tier cap. Adding an eighth search term would push a 31-day month to 992, so the search list is capped at 7 unless the schedule drops to 3 runs a day.
 
