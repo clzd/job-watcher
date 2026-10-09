@@ -31,10 +31,10 @@ test("fetchSearch returns results on 200", async () => {
   assert.deepEqual(await fetchSearch("website manager", env), results);
 });
 
-test("fetchSearch returns [] and logs on a non-2xx without leaking the key", async (t) => {
+test("fetchSearch returns null and logs on a non-2xx without leaking the key", async (t) => {
   const errors = t.mock.method(console, "error", () => {});
   globalThis.fetch = async () => new Response("rate limited", { status: 500 });
-  assert.deepEqual(await fetchSearch("website manager", env), []);
+  assert.equal(await fetchSearch("website manager", env), null);
   assert.equal(errors.mock.callCount(), 1);
   const logged = errors.mock.calls[0].arguments.map(String).join(" ");
   assert.ok(!logged.includes("mykey"), "app_key must not be logged");
@@ -45,9 +45,18 @@ test("fetchSearch returns [] when the 200 body has no results array", async () =
   assert.deepEqual(await fetchSearch("website manager", env), []);
 });
 
-test("fetchSearch returns [] and logs when fetch itself throws", async (t) => {
+test("fetchSearch returns null and logs when fetch itself throws", async (t) => {
   const errors = t.mock.method(console, "error", () => {});
   globalThis.fetch = async () => { throw new TypeError("network down"); };
-  assert.deepEqual(await fetchSearch("website manager", env), []);
+  assert.equal(await fetchSearch("website manager", env), null);
   assert.equal(errors.mock.callCount(), 1);
+});
+
+test("fetchSearch returns null and logs when a 200 body is not valid JSON", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  globalThis.fetch = async () => new Response("<html>gateway</html>", { status: 200 });
+  assert.equal(await fetchSearch("website manager", env), null);
+  assert.equal(errors.mock.callCount(), 1);
+  const logged = errors.mock.calls[0].arguments.map(String).join(" ");
+  assert.ok(!logged.includes("mykey"), "app_key must not be logged");
 });

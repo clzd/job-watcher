@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import worker, { run, SEARCH_TERMS } from "../src/index.js";
 import { fakeKv } from "./helpers.js";
 
-function fakeFetch({ results = [], telegramStatus = 200 } = {}) {
+// adzunaStatus may be a number or a function of the 0-based Adzuna call index.
+function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = {}) {
   const calls = { adzuna: [], telegram: [] };
   globalThis.fetch = async (url, options) => {
     const u = String(url);
     if (u.startsWith("https://api.adzuna.com/")) {
+      const status = typeof adzunaStatus === "function" ? adzunaStatus(calls.adzuna.length) : adzunaStatus;
       calls.adzuna.push(u);
+      if (status !== 200) return new Response("server error", { status });
       return new Response(JSON.stringify({ results }), { status: 200 });
     }
     if (u.startsWith("https://api.telegram.org/")) {
@@ -102,6 +105,31 @@ test("run sends nothing when Adzuna returns no results at all", async () => {
   await run(makeEnv(kv));
   assert.equal(calls.telegram.length, 0);
   assert.equal(kv.puts.length, 0);
+});
+
+test("run throws, sends nothing, and writes nothing when every Adzuna search fails", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ results: [remoteJob], adzunaStatus: 500 });
+  const kv = fakeKv();
+
+  await assert.rejects(run(makeEnv(kv)), /All Adzuna searches failed/);
+  assert.equal(calls.adzuna.length, 7);
+  assert.equal(calls.telegram.length, 0);
+  assert.equal(kv.puts.length, 0);
+});
+
+test("run carries on with the other searches when one Adzuna search fails", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ results: [remoteJob], adzunaStatus: (i) => (i === 0 ? 500 : 200) });
+  const kv = fakeKv();
+
+  await run(makeEnv(kv));
+
+  assert.equal(calls.adzuna.length, 7);
+  assert.equal(calls.telegram.length, 1);
+  const text = calls.telegram[0].text;
+  assert.equal(text.split("https://www.adzuna.com/land/ad/101").length - 1, 1, "job listed once");
+  assert.deepEqual(kv.puts.map((p) => p.key), ["101"]);
 });
 
 test("run throws and leaves KV untouched when Telegram rejects the message", async () => {

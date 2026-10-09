@@ -25,13 +25,16 @@ function dedupeById(jobs) {
 
 export async function run(env) {
   const perTerm = await Promise.all(SEARCH_TERMS.map((term) => fetchSearch(term, env)));
-  const candidates = dedupeById(perTerm.flat())
+  if (perTerm.every((results) => results === null)) {
+    throw new Error("All Adzuna searches failed");
+  }
+  const candidates = dedupeById(perTerm.flatMap((results) => results ?? []))
     .filter(passesTitleFilter)
     .filter(passesLocationFilter);
 
   const fresh = await findNew(candidates, env.SEEN_JOBS);
   if (fresh.length === 0) {
-    console.log(`No new jobs (${candidates.length} candidates, all seen)`);
+    console.log(`No new jobs (${candidates.length} candidates)`);
     return;
   }
 
