@@ -197,3 +197,135 @@ test("POST status decodes an escaped id", async () => {
   const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("a/b c").first();
   assert.equal(row.status, "dismissed");
 });
+
+// Helpers for the Run now route. deps.run resolves by default; pass a rejecting
+// fn to test the failure path. waited collects what the route hands to waitUntil.
+function runNow({ origin = "https://jobs.example", db = fakeDb(), run, waitUntil } = {}) {
+  const waited = [];
+  const calls = [];
+  const deps = {
+    run: run ?? (async () => { calls.push(1); }),
+  };
+  const ctxNow = {
+    access: { aud: "test" },
+    waitUntil: waitUntil === null ? undefined : (p) => waited.push(p),
+  };
+  const headers = { "content-type": "application/x-www-form-urlencoded" };
+  if (origin !== null) headers.origin = origin;
+  const req = new Request("https://jobs.example/runs/now", { method: "POST", headers, body: new URLSearchParams() });
+  return handleRequest(req, { DB: db }, ctxNow, deps).then((res) => ({ res, waited, calls }));
+}
+
+async function runningRowStarted(db, isoStartedAt) {
+  await db.prepare("INSERT INTO runs (started_at, outcome) VALUES (?, 'running')").bind(isoStartedAt).run();
+}
+
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+
+test("POST /runs/now starts a run in the background and redirects to /runs", async () => {
+  const { res, waited, calls } = await runNow();
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+  assert.equal(waited.length, 1);
+  await waited[0];
+  assert.equal(calls.length, 1);
+});
+
+test("POST /runs/now rejects a missing or foreign Origin with 403 and starts nothing", async () => {
+  for (const origin of [null, "https://evil.example"]) {
+    const { res, waited, calls } = await runNow({ origin });
+    assert.equal(res.status, 403, String(origin));
+    assert.equal(waited.length, 0);
+    assert.equal(calls.length, 0);
+  }
+});
+
+test("POST /runs/now skips the start when a running row is under 10 minutes old", async () => {
+  const db = fakeDb();
+  await runningRowStarted(db, minutesAgo(1));
+  const { res, waited, calls } = await runNow({ db });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+  assert.equal(waited.length, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("POST /runs/now starts a run when the running row is over 10 minutes old", async () => {
+  const db = fakeDb();
+  await runningRowStarted(db, minutesAgo(11));
+  const { waited, calls } = await runNow({ db });
+  assert.equal(waited.length, 1);
+  await waited[0];
+  assert.equal(calls.length, 1);
+});
+
+test("POST /runs/now starts a run when the latest row is finished", async () => {
+  const db = fakeDb();
+  const id = await startRun(db);
+  await finishRun(id, { outcome: "failed", error: "All Adzuna searches failed" }, db);
+  const { waited, calls } = await runNow({ db });
+  assert.equal(waited.length, 1);
+  await waited[0];
+  assert.equal(calls.length, 1);
+});
+
+test("POST /runs/now treats a running row with an unparseable started_at as not in progress", async () => {
+  const db = fakeDb();
+  await runningRowStarted(db, "not a date");
+  const { res, waited } = await runNow({ db });
+  assert.equal(res.status, 303);
+  assert.equal(waited.length, 1);
+});
+
+test("POST /runs/now treats a running row started in the future as in progress", async () => {
+  const db = fakeDb();
+  await runningRowStarted(db, minutesAgo(-5));
+  const { waited, calls } = await runNow({ db });
+  assert.equal(waited.length, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("POST /runs/now logs a rejected run and the waitUntil promise resolves", async (t) => {
+  const errors = [];
+  t.mock.method(console, "error", (msg) => errors.push(msg));
+  const { res, waited } = await runNow({ run: async () => { throw new Error("All Adzuna searches failed"); } });
+  assert.equal(res.status, 303);
+  assert.equal(waited.length, 1);
+  await waited[0];
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /Run now failed: All Adzuna searches failed/);
+});
+
+test("POST /runs/now still starts the run when ctx has no waitUntil", async () => {
+  const { res, calls } = await runNow({ waitUntil: null });
+  assert.equal(res.status, 303);
+  // Without waitUntil the promise is simply started; give it a tick to run.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.length, 1);
+});
+
+test("POST /runs/now without deps.run redirects and starts nothing", async () => {
+  const headers = { "content-type": "application/x-www-form-urlencoded", origin: "https://jobs.example" };
+  const req = new Request("https://jobs.example/runs/now", { method: "POST", headers, body: new URLSearchParams() });
+  const res = await handleRequest(req, { DB: fakeDb() }, ctx);
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+});
+
+test("GET /runs/now redirects to /runs and starts nothing", async () => {
+  const waited = [];
+  const calls = [];
+  const ctxNow = { access: { aud: "test" }, waitUntil: (p) => waited.push(p) };
+  const res = await handleRequest(new Request("https://jobs.example/runs/now"), { DB: fakeDb() }, ctxNow, { run: async () => { calls.push(1); } });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+  assert.equal(waited.length, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("POST /runs/now returns 500 when D1 is down", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const { res } = await runNow({ db: fakeDb({ broken: true }) });
+  assert.equal(res.status, 500);
+  assert.equal(await res.text(), "Database error");
+});

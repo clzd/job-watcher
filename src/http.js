@@ -8,6 +8,8 @@ const STATUSES = ["new", "applied", "dismissed"];
 const FILTERS = [...STATUSES, "all"];
 const LABELS = { new: "New", applied: "Applied", dismissed: "Dismissed", all: "All" };
 const RUNS_LIMIT = 50;
+// A "running" row older than this is treated as crashed, so a stuck row cannot block Run now.
+const RUN_IN_PROGRESS_MS = 10 * 60_000;
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -196,6 +198,13 @@ async function route(request, env, ctx, deps) {
   if (request.method === "GET" && url.pathname === "/runs") {
     return html(runsPage(await listRuns(RUNS_LIMIT, env.DB)));
   }
+  if (url.pathname === "/runs/now") {
+    // A GET here is a POST replayed by the Access login after a session expired. Change nothing.
+    if (request.method !== "POST") {
+      return new Response(null, { status: 303, headers: { location: `${url.origin}/runs` } });
+    }
+    return startRunNow(request, env, ctx, deps, url);
+  }
   const statusMatch = url.pathname.match(/^\/jobs\/([^/]+)\/status$/);
   if (statusMatch && request.method === "POST") return updateStatus(request, env, url, statusMatch[1]);
   // A GET here is a POST replayed by the Access login after a session expired. Change nothing.
@@ -236,6 +245,28 @@ async function updateStatus(request, env, url, rawId) {
   const referer = parseUrl(request.headers.get("referer"));
   const location = referer?.origin === url.origin ? referer.href : `${url.origin}/`;
   return new Response(null, { status: 303, headers: { location } });
+}
+
+function runInProgress(latest) {
+  if (latest?.outcome !== "running") return false;
+  const startedAt = new Date(latest.started_at).getTime();
+  if (Number.isNaN(startedAt)) return false;
+  return Date.now() - startedAt < RUN_IN_PROGRESS_MS;
+}
+
+// Starts a real run (same as the cron) in the background and sends the browser
+// back to the Runs page, where the new row shows as running.
+async function startRunNow(request, env, ctx, deps, url) {
+  // CSRF guard: the form must come from this host.
+  if (parseUrl(request.headers.get("origin"))?.host !== url.host) return text("Forbidden", 403);
+  const redirect = new Response(null, { status: 303, headers: { location: `${url.origin}/runs` } });
+  if (typeof deps?.run !== "function") return redirect;
+  if (runInProgress(await latestRun(env.DB))) return redirect;
+  const pending = deps.run().catch((err) => {
+    console.error(`Run now failed: ${err?.message ?? err}`);
+  });
+  if (typeof ctx?.waitUntil === "function") ctx.waitUntil(pending);
+  return redirect;
 }
 
 export async function handleRequest(request, env, ctx, deps = {}) {
