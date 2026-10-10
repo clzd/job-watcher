@@ -199,7 +199,7 @@ test("POST status decodes an escaped id", async () => {
 });
 
 // Helpers for the Run now route. deps.run resolves after a short delay by
-// default, so reading calls right after the response proves the route waited.
+// default, so a test can see the Running page arrive before the run finishes.
 // Pass a rejecting fn to test the failure path. waited collects what the route
 // hands to waitUntil.
 function runNow({ origin = "https://jobs.example", db = fakeDb(), run, waitUntil } = {}) {
