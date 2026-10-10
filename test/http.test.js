@@ -330,16 +330,32 @@ test("POST /runs/now returns 500 when D1 is down", async (t) => {
   assert.equal(await res.text(), "Database error");
 });
 
-test("GET /runs renders the Run now form in the empty and non-empty states", async () => {
-  const form = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now</button></form>';
+const RUN_NOW_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now (about 40 seconds, leave the page open)</button></form>';
+const RUNNING_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit" disabled>Running, about 40 seconds</button></form>';
+
+test("GET /runs renders the enabled Run now form in the empty and finished states", async () => {
   const empty = await (await get("/runs", { DB: fakeDb() })).text();
-  assert.ok(empty.includes(form), "empty state");
-  assert.ok(empty.includes("No runs yet"));
+  assert.ok(empty.includes(RUN_NOW_FORM), "empty state");
+  assert.ok(empty.indexOf(RUN_NOW_FORM) < empty.indexOf("No runs yet"), "form sits above the empty message");
 
   const db = fakeDb();
   const id = await startRun(db);
   await finishRun(id, { outcome: "ok", candidates: 1, fresh: 1, sent: 1, termsFailed: 0 }, db);
   const full = await (await get("/runs", { DB: db })).text();
-  assert.ok(full.includes(form), "non-empty state");
-  assert.ok(full.indexOf(form) < full.indexOf("<table"), "form sits above the table");
+  assert.ok(full.includes(RUN_NOW_FORM), "finished state");
+  assert.ok(!full.includes("disabled>"), "button is enabled");
+  assert.ok(full.indexOf(RUN_NOW_FORM) < full.indexOf("<table"), "form sits above the table");
+});
+
+test("GET /runs disables the Run now button while a run is in progress", async () => {
+  const db = fakeDb();
+  await runningRowStarted(db, minutesAgo(1));
+  const running = await (await get("/runs", { DB: db })).text();
+  assert.ok(running.includes(RUNNING_FORM), "fresh running row disables the button");
+  assert.ok(!running.includes(RUN_NOW_FORM));
+
+  const stale = fakeDb();
+  await runningRowStarted(stale, minutesAgo(11));
+  const html = await (await get("/runs", { DB: stale })).text();
+  assert.ok(html.includes(RUN_NOW_FORM), "a running row over 10 minutes old does not disable the button");
 });

@@ -71,7 +71,7 @@ a{color:#0b5cad}
 .actions form{margin:0}
 .run-now{margin:0 0 16px}
 .actions button,.run-now button{font:inherit;font-size:.9rem;min-height:44px;padding:6px 12px;border:1px solid #c8c8c4;border-radius:6px;background:#fff;color:#1a1a1a}
-.actions button:disabled{background:#e8e8e4;color:#777}
+.actions button:disabled,.run-now button:disabled{background:#e8e8e4;color:#777}
 .empty{color:#666}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;background:#fff;font-size:.9rem}
@@ -172,13 +172,23 @@ function runRow(run) {
   return `<tr${cls}>${cells.join("")}</tr>`;
 }
 
-const RUN_NOW_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now</button></form>';
+const RUN_NOW_LABEL = "Run now (about 40 seconds, leave the page open)";
+const RUNNING_LABEL = "Running, about 40 seconds";
+
+// Disabled while a run is in progress, so a refresh mid-run cannot start a second one.
+function runNowForm(inProgress) {
+  const button = inProgress
+    ? `<button type="submit" disabled>${escapeHtml(RUNNING_LABEL)}</button>`
+    : `<button type="submit">${escapeHtml(RUN_NOW_LABEL)}</button>`;
+  return `<form method="post" action="/runs/now" class="run-now">${button}</form>`;
+}
 
 function runsPage(runs) {
-  if (!runs.length) return layout("Runs", `${RUN_NOW_FORM}\n<p class="empty">No runs yet</p>`);
+  const form = runNowForm(runInProgress(runs[0]));
+  if (!runs.length) return layout("Runs", `${form}\n<p class="empty">No runs yet</p>`);
   return layout(
     "Runs",
-    `${RUN_NOW_FORM}
+    `${form}
 <div class="table-wrap"><table>
 <thead><tr><th>Started</th><th>Duration (s)</th><th>Outcome</th><th>Candidates</th><th>Fresh</th><th>Sent</th><th>Terms failed</th><th>Error</th></tr></thead>
 <tbody>
