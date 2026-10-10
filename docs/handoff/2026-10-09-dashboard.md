@@ -18,7 +18,7 @@ Anthony wants a web dashboard to view job entries and status. Your job is to com
 
 ## How a run works
 
-`src/index.js` `run(env)`: fetch 7 Adzuna terms one at a time, 2s apart (parallel calls get 429/503), fail only if all 7 fail, dedupe by id, filter by title and location, drop ids already in KV, send to Telegram in parts under 4096 chars, mark each part's ids seen right after that part sends. The dashboard's `POST /runs/now` calls the same `run(env)` through `ctx.waitUntil` and redirects to `/runs`.
+`src/index.js` `run(env)`: fetch 7 Adzuna terms one at a time, 2s apart (parallel calls get 429/503), fail only if all 7 fail, dedupe by id, filter by title and location, drop ids already in KV, send to Telegram in parts under 4096 chars, mark each part's ids seen right after that part sends. The dashboard's `POST /runs/now` calls the same `run(env)`, waits for it, and redirects to `/runs`.
 
 ## What the dashboard has to deal with
 
@@ -28,7 +28,7 @@ These are the facts that shape the design:
 2. **No run history.** The only record of a run is `console.log` / `console.error`, visible through Workers Logs (observability is on). Nothing records "run at X, N candidates, M sent, Adzuna term Y failed".
 3. **No HTTP handler.** The Worker only exports `scheduled`. A dashboard needs a `fetch` handler (or a separate Worker or Pages project).
 4. **No public URL.** `wrangler.toml` has `workers_dev = false`. Something has to be exposed, and it must be behind auth, because the page will show his job search.
-5. **Adzuna budget is tight.** 868 of about 1,000 calls a month are already spoken for. The dashboard must read stored data only and never call Adzuna.
+5. **Adzuna budget is tight.** 868 of about 1,000 calls a month are already spoken for. The dashboard must read stored data only and never call Adzuna. Superseded 2026-10-10: the Run now button is a deliberate exception, 7 calls per press.
 6. **Secrets in URLs.** Adzuna and Telegram URLs carry keys. Traces are off on purpose (`[observability.traces] enabled = false`). Do not log, store, or render any of those URLs. Job `redirect_url` values from Adzuna are fine.
 7. **Seen-marking order matters.** KV is written only after Telegram accepts a part, so a failed send retries next run. Any new write (job details, run record) must not break that guarantee or make a Telegram failure look like success.
 

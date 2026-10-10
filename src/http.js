@@ -1,5 +1,6 @@
 // Private dashboard served behind Cloudflare Access. Server-rendered HTML, no
-// client-side JavaScript, no external assets, and no outbound fetch.
+// client-side JavaScript, no external assets, and no outbound fetch of its own.
+// POST /runs/now runs the same search the cron does through deps.run.
 
 import { latestRun, listRuns, listJobs, countByStatus, setJobStatus } from "./store.js";
 import { salaryLine } from "./telegram.js";
