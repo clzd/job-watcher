@@ -61,6 +61,15 @@ test("finishRun writes outcome, counts, finished_at, and truncates error to 500"
   assert.ok(row.finished_at);
 });
 
+test("finishRun strips URLs from error so an API key is never stored", async () => {
+  const db = fakeDb();
+  const id = await startRun(db);
+  await finishRun(id, { outcome: "failed", error: "fetch https://api.adzuna.com/v1/api/jobs/us/search/1?app_key=SECRET failed" }, db);
+  const row = await db.prepare("SELECT error FROM runs WHERE id = ?").bind(id).first();
+  assert.equal(row.error, "fetch [url] failed");
+  assert.ok(!row.error.includes("app_key") && !row.error.includes("SECRET") && !row.error.includes("https://"));
+});
+
 test("finishRun with a null runId is a no-op", async () => {
   const db = fakeDb();
   await finishRun(null, { outcome: "ok" }, db);

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 export function fakeKv(seenIds = []) {
@@ -17,14 +17,19 @@ export function fakeKv(seenIds = []) {
   };
 }
 
-const MIGRATION = readFileSync(new URL("../migrations/0001_init.sql", import.meta.url), "utf8");
+// Every migration, applied in filename order, as D1 applies them.
+const MIGRATIONS_DIR = new URL("../migrations/", import.meta.url);
+const MIGRATIONS = readdirSync(MIGRATIONS_DIR)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((name) => readFileSync(new URL(name, MIGRATIONS_DIR), "utf8"));
 
-// In-memory stand-in for a D1 binding, backed by node:sqlite with the real migration.
+// In-memory stand-in for a D1 binding, backed by node:sqlite with the real migrations.
 // bind() returns a new statement (like D1), so one prepared statement can be bound
 // several times for a batch. Rows come back as plain objects, as D1 returns them.
 export function fakeDb({ broken = false } = {}) {
   const db = new DatabaseSync(":memory:");
-  db.exec(MIGRATION);
+  for (const sql of MIGRATIONS) db.exec(sql);
 
   function statement(sql, params = []) {
     return {

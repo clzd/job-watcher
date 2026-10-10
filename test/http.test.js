@@ -78,7 +78,33 @@ test("GET /runs renders ok and failed runs", async () => {
   await finishRun(b, { outcome: "failed", error: "Telegram sendMessage failed: 500" }, db);
   const html = await (await get("/runs", { DB: db })).text();
   assert.ok(html.includes("Telegram sendMessage failed: 500"));
-  assert.ok(html.includes("failed") && html.includes("ok"));
+  assert.ok(html.includes(`<tr class="failed">`));
+  assert.ok(html.includes(`<td class="outcome">ok</td><td class="num">4</td><td class="num">3</td><td class="num">3</td><td class="num">1</td>`));
+});
+
+test("GET / renders the three status buttons with the current one disabled", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  const html = await (await get("/", { DB: db })).text();
+  assert.match(html, /<button type="submit" disabled>New<\/button>[\s\S]*<button type="submit">Applied<\/button>[\s\S]*<button type="submit">Dismissed<\/button>/);
+});
+
+test("GET / and GET /runs send a Content-Security-Policy without form-action", async () => {
+  const csp = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'";
+  for (const path of ["/", "/runs"]) {
+    const res = await get(path, { DB: fakeDb() });
+    assert.equal(res.headers.get("content-security-policy"), csp);
+  }
+});
+
+test("GET on a status path redirects to / and changes nothing", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  const res = await get("/jobs/1/status?status=applied", { DB: db });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/");
+  const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("1").first();
+  assert.equal(row.status, "new");
 });
 
 test("GET /runs shows the empty state", async () => {

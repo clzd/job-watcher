@@ -38,8 +38,15 @@ function text(body, status) {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
+// No form-action: a POST after the Access session expires is redirected to the
+// Access login on another origin, and form-action 'self' would block it.
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'";
+
 function html(body) {
-  return new Response(body, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "content-security-policy": CSP },
+  });
 }
 
 const STYLE = `
@@ -59,7 +66,7 @@ a{color:#0b5cad}
 .job p{margin:0;color:#444;overflow-wrap:anywhere}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .actions form{margin:0}
-.actions button{font:inherit;font-size:.9rem;padding:6px 12px;border:1px solid #c8c8c4;border-radius:6px;background:#fff;color:#1a1a1a}
+.actions button{font:inherit;font-size:.9rem;min-height:44px;padding:6px 12px;border:1px solid #c8c8c4;border-radius:6px;background:#fff;color:#1a1a1a}
 .actions button:disabled{background:#e8e8e4;color:#777}
 .empty{color:#666}
 .table-wrap{overflow-x:auto}
@@ -189,8 +196,12 @@ async function route(request, env) {
   if (request.method === "GET" && url.pathname === "/runs") {
     return html(runsPage(await listRuns(RUNS_LIMIT, env.DB)));
   }
-  const statusMatch = request.method === "POST" && url.pathname.match(/^\/jobs\/([^/]+)\/status$/);
-  if (statusMatch) return updateStatus(request, env, url, statusMatch[1]);
+  const statusMatch = url.pathname.match(/^\/jobs\/([^/]+)\/status$/);
+  if (statusMatch && request.method === "POST") return updateStatus(request, env, url, statusMatch[1]);
+  // A GET here is a POST replayed by the Access login after a session expired. Change nothing.
+  if (statusMatch && request.method === "GET") {
+    return new Response(null, { status: 303, headers: { location: `${url.origin}/` } });
+  }
   return text("Not found", 404);
 }
 

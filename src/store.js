@@ -21,6 +21,11 @@ function logFailure(what, err) {
   console.error(`D1 ${what} failed: ${err?.message ?? err}`);
 }
 
+// An Adzuna URL carries the API key, so no URL is ever stored in runs.error.
+function cleanError(value) {
+  return String(value).replace(/https?:\/\/\S+/g, "[url]").slice(0, 500);
+}
+
 function numberOrNull(value) {
   return typeof value === "number" ? value : null;
 }
@@ -47,7 +52,7 @@ export async function finishRun(runId, fields, db) {
       const value = fields?.[field];
       if (value === undefined) continue;
       sets.push(`${column} = ?`);
-      params.push(field === "error" && value !== null ? String(value).slice(0, 500) : value);
+      params.push(field === "error" && value !== null ? cleanError(value) : value);
     }
     params.push(runId);
     await db.prepare(`UPDATE runs SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
