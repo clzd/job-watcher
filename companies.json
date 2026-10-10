@@ -1,0 +1,164 @@
+{
+  "_notes": [
+    "Short list of company feeds, every one fetched every run. Verified live on 2026-10-10.",
+    "Keep it at or under 35 units: one per Greenhouse board, four per Workday tenant (one per search phrase).",
+    "7 Adzuna + 35 feeds leaves 8 Telegram parts under the free plan's 50 outbound requests per run.",
+    "The full 178-company research list with feed URL patterns is docs/companies-verified-2026-10-10.json."
+  ],
+  "companies": [
+    {
+      "name": "Datadog",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "datadog",
+      "fit": "Principal CRO and Web Analyst (NYC); Web Content Engineering & AI Visibility Lead"
+    },
+    {
+      "name": "Stripe",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "stripe",
+      "fit": "Full Stack Engineer, Web Presence and Platform (US Remote)"
+    },
+    {
+      "name": "Databricks",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "databricks",
+      "fit": "Director, Web Marketing (US)"
+    },
+    {
+      "name": "Calendly",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "calendly",
+      "fit": "Senior Full Stack Engineer, Website Development (Remote US)"
+    },
+    {
+      "name": "Gong",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "gongio",
+      "fit": "Sr. Director of Web Strategy & Experience (SF)"
+    },
+    {
+      "name": "Figma",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "figma",
+      "fit": "Marketing Engineer; Brand Designer, Web"
+    },
+    {
+      "name": "Asana",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "asana",
+      "fit": "Sr. Manager, Web Strategy (Vancouver)"
+    },
+    {
+      "name": "DoorDash",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "doordashusa",
+      "fit": "Marketing Technology roles, Miami listed"
+    },
+    {
+      "name": "Cloudflare",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "cloudflare",
+      "fit": null
+    },
+    {
+      "name": "Webflow",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "webflow",
+      "fit": null
+    },
+    {
+      "name": "Contentful",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "contentful",
+      "fit": null
+    },
+    {
+      "name": "Vercel",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "vercel",
+      "fit": null
+    },
+    {
+      "name": "Kaseya",
+      "group": "florida",
+      "location": "Miami",
+      "ats": "greenhouse",
+      "slug": "kaseya",
+      "fit": null
+    },
+    {
+      "name": "Valtech",
+      "group": "optimizely",
+      "ats": "greenhouse",
+      "slug": "valtech",
+      "fit": "Lead Optimizely Solutions Architect (Canada Remote)"
+    },
+    {
+      "name": "LaunchDarkly",
+      "group": "saas",
+      "ats": "greenhouse",
+      "slug": "launchdarkly",
+      "fit": "Head of Experimentation (Remote US)"
+    },
+    {
+      "name": "Zoom",
+      "group": "optimizely",
+      "ats": "workday",
+      "host": "zoom.wd5.myworkdayjobs.com",
+      "tenant": "zoom",
+      "site": "Zoom",
+      "fit": "Digital Experience Specialist (Remote US)"
+    },
+    {
+      "name": "AutoNation",
+      "group": "florida",
+      "location": "Fort Lauderdale",
+      "ats": "workday",
+      "host": "autonation.wd5.myworkdayjobs.com",
+      "tenant": "autonation",
+      "site": "Careers",
+      "fit": "Sr Manager, Marketing Technology"
+    },
+    {
+      "name": "Chewy",
+      "group": "florida",
+      "location": "Plantation",
+      "ats": "workday",
+      "host": "chewy.wd5.myworkdayjobs.com",
+      "tenant": "chewy",
+      "site": "External",
+      "fit": "Sr. Marketing Manager, Performance Marketing Experimentation"
+    },
+    {
+      "name": "Seminole Hard Rock",
+      "group": "florida",
+      "location": "Davie",
+      "ats": "workday",
+      "host": "seminolehardrock.wd503.myworkdayjobs.com",
+      "tenant": "seminolehardrock",
+      "site": "seminolehardrockcareers",
+      "fit": "Regional Director, Paid Digital Marketing; Senior Frontend Engineer"
+    },
+    {
+      "name": "Accenture Song",
+      "group": "optimizely",
+      "ats": "workday",
+      "host": "accenture.wd103.myworkdayjobs.com",
+      "tenant": "accenture",
+      "site": "AccentureCareers",
+      "fit": "CRO Manager (Song); CMS Architect; Frontend Developer CRO"
+    }
+  ]
+}
