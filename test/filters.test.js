@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { passesTitleFilter, passesLocationFilter } from "../src/filters.js";
+import { passesTitleFilter, passesLocationFilter, passesAtsTitleFilter } from "../src/filters.js";
 
 const job = (title, location) => ({ title, location });
 
@@ -74,4 +74,35 @@ test("location filter does not treat FL inside a word as Florida", () => {
 test("location filter handles a job with no location object", () => {
   assert.equal(passesLocationFilter({ title: "Web Manager" }), false);
   assert.equal(passesLocationFilter({ title: "Remote Web Manager" }), true);
+});
+
+test("passesAtsTitleFilter keeps web, digital experience, CMS and CRO titles", () => {
+  const keep = [
+    "Manager, Web Content",
+    "Digital Experience Specialist",
+    "Lead Optimizely Solutions Architect",
+    "Senior WordPress Engineer",
+    "Webmaster",
+    "CRO Manager",
+    "Conversion Rate Optimization Lead",
+    "Head of Experimentation",
+    "Sr Manager, Marketing Technology",
+    "MarTech Platform Delivery Manager",
+    "CMS Architect",
+    "Senior Software Engineer, Web",
+  ];
+  for (const title of keep) assert.ok(passesAtsTitleFilter({ title }), title);
+});
+
+test("passesAtsTitleFilter drops titles with no web signal", () => {
+  const drop = [
+    "Full Time - Merchandising Service Associate - Day",
+    "Technical Support Engineer I",
+    "Registered Nurse",
+    "Webinar Coordinator",
+    "Customer Success Associate (Denver, CO)",
+    "Chief Revenue Officer",
+  ];
+  for (const title of drop) assert.ok(!passesAtsTitleFilter({ title }), title);
+  assert.ok(!passesAtsTitleFilter({}), "missing title");
 });

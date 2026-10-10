@@ -16,3 +16,12 @@ export function passesLocationFilter(job) {
   if (area.some((a) => String(a).toLowerCase() === "florida")) return true;
   return FLORIDA.test(display) || FL_SUFFIX.test(display);
 }
+
+// Company feeds return every job a company has open, so ATS jobs must show a web signal
+// in the title. Adzuna results are already keyword searches and skip this filter.
+const ATS_TITLE =
+  /\b(web|website|webmaster|digital experience|optimizely|episerver|wordpress|cms|conversion rate|cro|experimentation|martech|marketing technology)\b/i;
+
+export function passesAtsTitleFilter(job) {
+  return ATS_TITLE.test(job.title ?? "");
+}
