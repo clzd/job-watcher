@@ -150,3 +150,13 @@ test("latestRun is null with no runs and listRuns is newest first", async () => 
   assert.equal((await latestRun(db)).id, second);
   assert.deepEqual((await listRuns(50, db)).map((r) => r.id), [second, 1]);
 });
+
+test("finishRun records the company feed counts", async () => {
+  const db = fakeDb();
+  const id = await startRun(db);
+  await finishRun(id, { outcome: "ok", candidates: 3, atsUnits: 35, atsFailed: 2 }, db);
+  const row = await latestRun(db);
+  assert.equal(row.ats_units, 35);
+  assert.equal(row.ats_failed, 2);
+  assert.equal(row.candidates, 3);
+});

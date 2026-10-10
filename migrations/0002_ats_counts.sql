@@ -1,0 +1,2 @@
+ALTER TABLE runs ADD COLUMN ats_units INTEGER;
+ALTER TABLE runs ADD COLUMN ats_failed INTEGER;

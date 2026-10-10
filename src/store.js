@@ -10,6 +10,8 @@ const RUN_COLUMNS = {
   fresh: "fresh",
   sent: "sent",
   termsFailed: "terms_failed",
+  atsUnits: "ats_units",
+  atsFailed: "ats_failed",
   error: "error",
 };
 
