@@ -18,7 +18,7 @@ Anthony wants a web dashboard to view job entries and status. Your job is to com
 
 ## How a run works
 
-`src/index.js` `run(env)`: fetch 7 Adzuna terms one at a time, 2s apart (parallel calls get 429/503), fail only if all 7 fail, dedupe by id, filter by title and location, drop ids already in KV, send to Telegram in parts under 4096 chars, mark each part's ids seen right after that part sends.
+`src/index.js` `run(env)`: fetch 7 Adzuna terms one at a time, 2s apart (parallel calls get 429/503), fail only if all 7 fail, dedupe by id, filter by title and location, drop ids already in KV, send to Telegram in parts under 4096 chars, mark each part's ids seen right after that part sends. The dashboard's `POST /runs/now` calls the same `run(env)` through `ctx.waitUntil` and redirects to `/runs`.
 
 ## What the dashboard has to deal with
 

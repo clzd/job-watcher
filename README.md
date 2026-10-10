@@ -35,7 +35,7 @@ https://job-watcher.anthony-calzadilla.workers.dev
 It sits behind Cloudflare Access, so it asks you to sign in with your Cloudflare login first. It has two pages:
 
 - Jobs (`/`): every job sent to Telegram, filterable by status, with buttons to mark each one new, applied, or dismissed.
-- Runs (`/runs`): the last 50 cron runs with their counts and outcome.
+- Runs (`/runs`): the last 50 runs with their counts and outcome, and a Run now button. Run now does a real run (Adzuna search, Telegram send, D1 row) in the background; refresh after about 45 seconds. Each press costs 7 of the roughly 1,000 monthly Adzuna calls, and the cron already uses 868, so about 18 presses a month fit.
 
 ## Run locally
 
