@@ -3,6 +3,7 @@ import { passesTitleFilter, passesLocationFilter } from "./filters.js";
 import { findNew, markSeen } from "./seen.js";
 import { formatMessages, send } from "./telegram.js";
 import { startRun, finishRun, saveJobs } from "./store.js";
+import { handleRequest } from "./http.js";
 
 // Seven terms. Do not add an eighth: 7 x 4 runs x 31 days = 868 of the 1,000 monthly Adzuna calls.
 export const SEARCH_TERMS = [
@@ -66,5 +67,8 @@ export async function run(env) {
 export default {
   async scheduled(controller, env, ctx) {
     await run(env);
+  },
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
   },
 };

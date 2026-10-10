@@ -94,3 +94,80 @@ test("unknown path is 404 and a D1 failure is a 500 with no SQL in the body", as
   const body = await res.text();
   assert.equal(body, "Database error");
 });
+
+function post(path, body, { origin = "https://jobs.example", referer } = {}, env) {
+  const headers = { "content-type": "application/x-www-form-urlencoded" };
+  if (origin !== null) headers.origin = origin;
+  if (referer) headers.referer = referer;
+  return handleRequest(new Request(`https://jobs.example${path}`, { method: "POST", headers, body: new URLSearchParams(body) }), env, ctx);
+}
+
+test("POST status updates the job and redirects to a same-origin referer", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  const res = await post("/jobs/1/status", { status: "applied" }, { referer: "https://jobs.example/?status=new" }, { DB: db });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/?status=new");
+  const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("1").first();
+  assert.equal(row.status, "applied");
+});
+
+test("POST status redirects to / when the referer is off-site or missing", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  const offsite = await post("/jobs/1/status", { status: "dismissed" }, { referer: "https://evil.example/" }, { DB: db });
+  assert.equal(offsite.headers.get("location"), "https://jobs.example/");
+  const none = await post("/jobs/1/status", { status: "new" }, {}, { DB: db });
+  assert.equal(none.headers.get("location"), "https://jobs.example/");
+});
+
+test("POST status rejects a missing or foreign Origin with 403", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  assert.equal((await post("/jobs/1/status", { status: "applied" }, { origin: null }, { DB: db })).status, 403);
+  assert.equal((await post("/jobs/1/status", { status: "applied" }, { origin: "https://evil.example" }, { DB: db })).status, 403);
+  const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("1").first();
+  assert.equal(row.status, "new");
+});
+
+test("POST status returns 400 for a bad value, a missing field, or an unknown id", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  assert.equal((await post("/jobs/1/status", { status: "bogus" }, {}, { DB: db })).status, 400);
+  assert.equal((await post("/jobs/1/status", {}, {}, { DB: db })).status, 400);
+  assert.equal((await post("/jobs/999/status", { status: "applied" }, {}, { DB: db })).status, 400);
+});
+
+test("POST requires Access too", async () => {
+  const res = await handleRequest(new Request("https://jobs.example/jobs/1/status", { method: "POST", headers: { origin: "https://jobs.example" }, body: new URLSearchParams({ status: "applied" }) }), { DB: fakeDb() }, { waitUntil() {} });
+  assert.equal(res.status, 401);
+});
+
+test("POST status treats a malformed Origin as 403 and a malformed Referer as /", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  assert.equal((await post("/jobs/1/status", { status: "applied" }, { origin: "not a url" }, { DB: db })).status, 403);
+  assert.equal((await post("/jobs/1/status", { status: "applied" }, { origin: "null" }, { DB: db })).status, 403);
+  const res = await post("/jobs/1/status", { status: "applied" }, { referer: "::not a url::" }, { DB: db });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/");
+});
+
+test("POST status returns 400 for a malformed id escape or a non-form body", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "X" }], 1, db);
+  assert.equal((await post("/jobs/%E0%A4%A/status", { status: "applied" }, {}, { DB: db })).status, 400);
+  const res = await handleRequest(new Request("https://jobs.example/jobs/1/status", { method: "POST", headers: { origin: "https://jobs.example", "content-type": "text/plain" }, body: "status=applied" }), { DB: db }, ctx);
+  assert.equal(res.status, 400);
+  const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("1").first();
+  assert.equal(row.status, "new");
+});
+
+test("POST status decodes an escaped id", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: "a/b c", title: "X" }], 1, db);
+  const res = await post(`/jobs/${encodeURIComponent("a/b c")}/status`, { status: "dismissed" }, {}, { DB: db });
+  assert.equal(res.status, 303);
+  const row = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind("a/b c").first();
+  assert.equal(row.status, "dismissed");
+});

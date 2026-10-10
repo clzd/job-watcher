@@ -1,7 +1,7 @@
 // Private dashboard served behind Cloudflare Access. Server-rendered HTML, no
 // client-side JavaScript, no external assets, and no outbound fetch.
 
-import { latestRun, listRuns, listJobs, countByStatus } from "./store.js";
+import { latestRun, listRuns, listJobs, countByStatus, setJobStatus } from "./store.js";
 import { salaryLine } from "./telegram.js";
 
 const STATUSES = ["new", "applied", "dismissed"];
@@ -189,7 +189,42 @@ async function route(request, env) {
   if (request.method === "GET" && url.pathname === "/runs") {
     return html(runsPage(await listRuns(RUNS_LIMIT, env.DB)));
   }
+  const statusMatch = request.method === "POST" && url.pathname.match(/^\/jobs\/([^/]+)\/status$/);
+  if (statusMatch) return updateStatus(request, env, url, statusMatch[1]);
   return text("Not found", 404);
+}
+
+// Parses a header value as a URL, or returns null when it is missing or malformed.
+function parseUrl(value) {
+  if (!value) return null;
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+async function updateStatus(request, env, url, rawId) {
+  // CSRF guard: the form must come from this host.
+  if (parseUrl(request.headers.get("origin"))?.host !== url.host) return text("Forbidden", 403);
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return text("Bad request", 400);
+  }
+  const status = form.get("status");
+  if (!STATUSES.includes(status)) return text("Bad request", 400);
+  let id;
+  try {
+    id = decodeURIComponent(rawId);
+  } catch {
+    return text("Bad request", 400);
+  }
+  if (!(await setJobStatus(id, status, env.DB))) return text("Bad request", 400);
+  const referer = parseUrl(request.headers.get("referer"));
+  const location = referer?.origin === url.origin ? referer.href : `${url.origin}/`;
+  return new Response(null, { status: 303, headers: { location } });
 }
 
 export async function handleRequest(request, env, ctx) {

@@ -241,3 +241,9 @@ test("a D1 outage does not stop the send or the KV write", async (t) => {
   assert.equal(calls.telegram.length, 1);
   assert.deepEqual(kv.puts.map((p) => p.key), ["101"]);
 });
+
+test("fetch handler serves the dashboard", async () => {
+  const res = await worker.fetch(new Request("https://jobs.example/runs"), makeEnv(fakeKv()), { access: { aud: "test" }, waitUntil() {} });
+  assert.equal(res.status, 200);
+  assert.ok((await res.text()).includes("No runs yet"));
+});
