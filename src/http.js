@@ -258,8 +258,8 @@ function runInProgress(latest) {
   return Date.now() - startedAt < RUN_IN_PROGRESS_MS;
 }
 
-// Starts a real run (same as the cron) in the background and sends the browser
-// back to the Runs page, where the new row shows as running.
+// Starts a real run (same as the cron), waits for it to finish, and sends the
+// browser back to the Runs page, which shows the finished row.
 async function startRunNow(request, env, ctx, deps, url) {
   // CSRF guard: the form must come from this host.
   if (parseUrl(request.headers.get("origin"))?.host !== url.host) return text("Forbidden", 403);
@@ -269,7 +269,10 @@ async function startRunNow(request, env, ctx, deps, url) {
   const pending = deps.run().catch((err) => {
     console.error(`Run now failed: ${err?.message ?? err}`);
   });
+  // waitUntil alone is cancelled 30s after the response and a run takes about 40s,
+  // so the request waits. waitUntil still covers a tab closed mid-run.
   if (typeof ctx?.waitUntil === "function") ctx.waitUntil(pending);
+  await pending;
   return redirect;
 }
 

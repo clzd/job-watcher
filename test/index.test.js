@@ -212,10 +212,10 @@ test("fetch handler passes run through to the dashboard", async () => {
   const res = await worker.fetch(req, makeEnv(kv), ctx);
   assert.equal(res.status, 303);
   assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+  assert.equal(calls.adzuna.length, 7, "run reached Adzuna before the response");
+  assert.equal(calls.telegram.length, 1);
   assert.equal(waited.length, 1);
   await waited[0];
-  assert.equal(calls.adzuna.length, 7, "run reached Adzuna through the dashboard");
-  assert.equal(calls.telegram.length, 1);
 });
 
 test("a clean run records an ok run row and one job row per sent job", async () => {
