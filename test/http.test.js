@@ -329,3 +329,17 @@ test("POST /runs/now returns 500 when D1 is down", async (t) => {
   assert.equal(res.status, 500);
   assert.equal(await res.text(), "Database error");
 });
+
+test("GET /runs renders the Run now form in the empty and non-empty states", async () => {
+  const form = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now</button></form>';
+  const empty = await (await get("/runs", { DB: fakeDb() })).text();
+  assert.ok(empty.includes(form), "empty state");
+  assert.ok(empty.includes("No runs yet"));
+
+  const db = fakeDb();
+  const id = await startRun(db);
+  await finishRun(id, { outcome: "ok", candidates: 1, fresh: 1, sent: 1, termsFailed: 0 }, db);
+  const full = await (await get("/runs", { DB: db })).text();
+  assert.ok(full.includes(form), "non-empty state");
+  assert.ok(full.indexOf(form) < full.indexOf("<table"), "form sits above the table");
+});

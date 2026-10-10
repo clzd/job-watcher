@@ -68,7 +68,8 @@ a{color:#0b5cad}
 .job p{margin:0;color:#444;overflow-wrap:anywhere}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .actions form{margin:0}
-.actions button{font:inherit;font-size:.9rem;min-height:44px;padding:6px 12px;border:1px solid #c8c8c4;border-radius:6px;background:#fff;color:#1a1a1a}
+.run-now{margin:0 0 16px}
+.actions button,.run-now button{font:inherit;font-size:.9rem;min-height:44px;padding:6px 12px;border:1px solid #c8c8c4;border-radius:6px;background:#fff;color:#1a1a1a}
 .actions button:disabled{background:#e8e8e4;color:#777}
 .empty{color:#666}
 .table-wrap{overflow-x:auto}
@@ -170,11 +171,14 @@ function runRow(run) {
   return `<tr${cls}>${cells.join("")}</tr>`;
 }
 
+const RUN_NOW_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now</button></form>';
+
 function runsPage(runs) {
-  if (!runs.length) return layout("Runs", `<p class="empty">No runs yet</p>`);
+  if (!runs.length) return layout("Runs", `${RUN_NOW_FORM}\n<p class="empty">No runs yet</p>`);
   return layout(
     "Runs",
-    `<div class="table-wrap"><table>
+    `${RUN_NOW_FORM}
+<div class="table-wrap"><table>
 <thead><tr><th>Started</th><th>Duration (s)</th><th>Outcome</th><th>Candidates</th><th>Fresh</th><th>Sent</th><th>Terms failed</th><th>Error</th></tr></thead>
 <tbody>
 ${runs.map(runRow).join("\n")}
