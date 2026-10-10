@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import worker, { run, SEARCH_TERMS } from "../src/index.js";
-import { fakeKv } from "./helpers.js";
+import { fakeKv, fakeDb } from "./helpers.js";
 import { formatMessages } from "../src/telegram.js";
 
 // adzunaStatus and telegramStatus may each be a number or a function of the 0-based call index.
@@ -25,13 +25,14 @@ function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = 
   return calls;
 }
 
-function makeEnv(kv) {
+function makeEnv(kv, db = fakeDb()) {
   return {
     ADZUNA_APP_ID: "id",
     ADZUNA_APP_KEY: "key",
     TELEGRAM_BOT_TOKEN: "tok",
     TELEGRAM_CHAT_ID: "chat",
     SEEN_JOBS: kv,
+    DB: db,
   };
 }
 
@@ -171,4 +172,72 @@ test("scheduled handler awaits run", async () => {
   const kv = fakeKv();
   await worker.scheduled({ cron: "0 */6 * * *" }, makeEnv(kv), { waitUntil() {} });
   assert.equal(calls.telegram.length, 1);
+});
+
+test("a clean run records an ok run row and one job row per sent job", async () => {
+  fakeFetch({ results: [remoteJob, texasJob, internJob] });
+  const db = fakeDb();
+  await run(makeEnv(fakeKv(), db));
+  const runRow = await db.prepare("SELECT * FROM runs").first();
+  assert.equal(runRow.outcome, "ok");
+  assert.deepEqual([runRow.candidates, runRow.fresh, runRow.sent, runRow.terms_failed], [1, 1, 1, 0]);
+  assert.ok(runRow.finished_at);
+  const { results } = await db.prepare("SELECT id, run_id FROM jobs").all();
+  assert.deepEqual(results, [{ id: "101", run_id: runRow.id }]);
+});
+
+test("a run with nothing new still records an ok row with zero fresh", async () => {
+  fakeFetch({ results: [remoteJob] });
+  const db = fakeDb();
+  await run(makeEnv(fakeKv([101]), db));
+  const row = await db.prepare("SELECT outcome, candidates, fresh, sent FROM runs").first();
+  assert.deepEqual(row, { outcome: "ok", candidates: 1, fresh: 0, sent: 0 });
+});
+
+test("a Telegram failure on part 2 keeps part 1 in KV and D1 and marks the run failed", async () => {
+  const jobs = Array.from({ length: 80 }, (_, i) => ({
+    ...remoteJob, id: 1000 + i,
+    title: `Web Platform Manager ${i} ${"x".repeat(120)}`,
+    redirect_url: `https://www.adzuna.com/land/ad/${1000 + i}`,
+  }));
+  const parts = formatMessages(jobs);
+  fakeFetch({ results: jobs, telegramStatus: (i) => (i === 0 ? 200 : 500) });
+  const kv = fakeKv();
+  const db = fakeDb();
+  await assert.rejects(run(makeEnv(kv, db)), /Telegram sendMessage failed: 500/);
+  assert.deepEqual(kv.puts.map((p) => p.key).sort(), parts[0].jobs.map((j) => String(j.id)).sort());
+  const { results } = await db.prepare("SELECT id FROM jobs ORDER BY id").all();
+  assert.deepEqual(results.map((r) => r.id), parts[0].jobs.map((j) => String(j.id)).sort());
+  const runRow = await db.prepare("SELECT outcome, fresh, sent, error FROM runs").first();
+  assert.equal(runRow.outcome, "failed");
+  assert.equal(runRow.fresh, 80);
+  assert.equal(runRow.sent, parts[0].jobs.length);
+  assert.match(runRow.error, /Telegram sendMessage failed: 500/);
+});
+
+test("partial Adzuna failure records terms_failed and outcome ok", async (t) => {
+  t.mock.method(console, "error", () => {});
+  fakeFetch({ results: [remoteJob], adzunaStatus: (i) => (i < 2 ? 500 : 200) });
+  const db = fakeDb();
+  await run(makeEnv(fakeKv(), db));
+  const row = await db.prepare("SELECT outcome, terms_failed FROM runs").first();
+  assert.deepEqual(row, { outcome: "ok", terms_failed: 2 });
+});
+
+test("total Adzuna failure records a failed run with the error", async (t) => {
+  t.mock.method(console, "error", () => {});
+  fakeFetch({ results: [remoteJob], adzunaStatus: 500 });
+  const db = fakeDb();
+  await assert.rejects(run(makeEnv(fakeKv(), db)), /All Adzuna searches failed/);
+  const row = await db.prepare("SELECT outcome, terms_failed, error FROM runs").first();
+  assert.deepEqual(row, { outcome: "failed", terms_failed: 7, error: "All Adzuna searches failed" });
+});
+
+test("a D1 outage does not stop the send or the KV write", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ results: [remoteJob] });
+  const kv = fakeKv();
+  await run(makeEnv(kv, fakeDb({ broken: true })));
+  assert.equal(calls.telegram.length, 1);
+  assert.deepEqual(kv.puts.map((p) => p.key), ["101"]);
 });
