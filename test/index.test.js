@@ -33,6 +33,7 @@ function makeEnv(kv, db = fakeDb()) {
     TELEGRAM_CHAT_ID: "chat",
     SEEN_JOBS: kv,
     DB: db,
+    SEARCH_GAP_MS: "0",
   };
 }
 
@@ -94,6 +95,30 @@ test("run calls Adzuna once per term, sends one message, and marks the job seen 
   assert.ok(!text.includes("Intern"), "intern job filtered out");
   assert.deepEqual(kv.puts.map((p) => p.key), ["101"]);
   assert.equal(kv.puts[0].options.expirationTtl, 5184000);
+});
+
+test("run searches one term at a time, pausing SEARCH_GAP_MS between searches", async () => {
+  // Adzuna answers 429 and 503 when several searches land at once.
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const startedAt = [];
+  globalThis.fetch = async (url) => {
+    assert.ok(String(url).startsWith("https://api.adzuna.com/"));
+    startedAt.push(Date.now());
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight--;
+    return new Response(JSON.stringify({ results: [] }), { status: 200 });
+  };
+
+  await run({ ...makeEnv(fakeKv()), SEARCH_GAP_MS: "30" });
+
+  assert.equal(startedAt.length, 7);
+  assert.equal(maxInFlight, 1);
+  for (let i = 1; i < startedAt.length; i++) {
+    assert.ok(startedAt[i] - startedAt[i - 1] >= 30, `gap before search ${i} was too short`);
+  }
 });
 
 test("run sends nothing and writes nothing when every match is already seen", async () => {

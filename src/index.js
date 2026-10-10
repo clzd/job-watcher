@@ -16,6 +16,22 @@ export const SEARCH_TERMS = [
   "WordPress manager",
 ];
 
+// Adzuna answers 429 and 503 when several searches land at once, so search one term at a time.
+// env.SEARCH_GAP_MS overrides the pause (tests set it to 0).
+const SEARCH_GAP_MS = 2000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function searchAll(env) {
+  const gapMs = Number(env.SEARCH_GAP_MS ?? SEARCH_GAP_MS);
+  const perTerm = [];
+  for (const [i, term] of SEARCH_TERMS.entries()) {
+    if (i > 0) await sleep(gapMs);
+    perTerm.push(await fetchSearch(term, env));
+  }
+  return perTerm;
+}
+
 function dedupeById(jobs) {
   const byId = new Map();
   for (const job of jobs) {
@@ -30,7 +46,7 @@ export async function run(env) {
   // Counts known so far, recorded on the run row whether the run succeeds or fails.
   const counts = {};
   try {
-    const perTerm = await Promise.all(SEARCH_TERMS.map((term) => fetchSearch(term, env)));
+    const perTerm = await searchAll(env);
     counts.termsFailed = perTerm.filter((results) => results === null).length;
     if (counts.termsFailed === perTerm.length) {
       throw new Error("All Adzuna searches failed");
