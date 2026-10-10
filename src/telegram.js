@@ -1,7 +1,7 @@
 const TELEGRAM_LIMIT = 4096;
 const money = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
-function salaryLine(job) {
+export function salaryLine(job) {
   const min = typeof job.salary_min === "number" ? job.salary_min : null;
   const max = typeof job.salary_max === "number" ? job.salary_max : null;
   if (min !== null && max !== null) {
