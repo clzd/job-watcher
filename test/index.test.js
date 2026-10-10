@@ -210,11 +210,12 @@ test("fetch handler passes run through to the dashboard", async () => {
     body: new URLSearchParams(),
   });
   const res = await worker.fetch(req, makeEnv(kv), ctx);
-  assert.equal(res.status, 303);
-  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
-  assert.equal(calls.adzuna.length, 7, "run reached Adzuna before the response");
-  assert.equal(calls.telegram.length, 1);
+  assert.equal(res.status, 200);
   assert.equal(waited.length, 1);
+  const html = await res.text();
+  assert.ok(html.includes('<meta http-equiv="refresh" content="0;url=/runs">'));
+  assert.equal(calls.adzuna.length, 7, "run reached Adzuna through the dashboard");
+  assert.equal(calls.telegram.length, 1);
   await waited[0];
 });
 

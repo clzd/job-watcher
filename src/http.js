@@ -79,9 +79,18 @@ th,td{padding:6px 8px;border-bottom:1px solid #e4e4e0;text-align:left;vertical-a
 td.num{text-align:right}
 tr.failed td{background:#fdecec}
 tr.failed .outcome{color:#a61b1b;font-weight:600}
+.run-now button:not(:disabled){cursor:pointer}
+.run-now button:not(:disabled):hover{border-color:#1f2933}
+.run-now button:not(:disabled):active{background:#e8e8e4;transform:translateY(1px)}
+.running{padding:32px 0;text-align:center}
+.running h1{margin:0 0 8px;font-size:1.2rem}
+.running p{margin:0 0 8px;color:#444}
+.spinner{width:40px;height:40px;margin:0 auto 16px;border:4px solid #deded9;border-top-color:#1f2933;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
 `;
 
-function layout(title, bodyHtml) {
+function layoutStart(title) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -93,11 +102,17 @@ function layout(title, bodyHtml) {
 <body>
 <header><strong>job-watcher</strong><a href="/">Jobs</a><a href="/runs">Runs</a></header>
 <main>
-${bodyHtml}
+`;
+}
+
+const LAYOUT_END = `
 </main>
 </body>
 </html>
 `;
+
+function layout(title, bodyHtml) {
+  return `${layoutStart(title)}${bodyHtml}${LAYOUT_END}`;
 }
 
 function statusLine(latest) {
@@ -174,6 +189,17 @@ function runRow(run) {
 
 const RUN_NOW_LABEL = "Run now (about 40 seconds, leave the page open)";
 const RUNNING_LABEL = "Running, about 40 seconds";
+
+const RUNNING_PAGE_BODY = `<section class="running" role="status">
+<div class="spinner" aria-hidden="true"></div>
+<h1>Running the job search</h1>
+<p>This takes about 40 seconds. Leave this page open.</p>
+<p>The Runs page opens on its own when it finishes.</p>
+</section>`;
+
+const RUNNING_PAGE_DONE = `
+<meta http-equiv="refresh" content="0;url=/runs">
+<p class="running"><a href="/runs">Done. See the result.</a></p>`;
 
 // Disabled while a run is in progress, so a refresh mid-run cannot start a second one.
 function runNowForm(inProgress) {
@@ -269,22 +295,47 @@ function runInProgress(latest) {
   return Date.now() - startedAt < RUN_IN_PROGRESS_MS;
 }
 
-// Starts a real run (same as the cron), waits for it to finish, and sends the
-// browser back to the Runs page, which shows the finished row.
+// Answers at once with a "Running" page and keeps the body open while the run
+// works. Cloudflare keeps a Worker alive while it streams a response, which
+// ctx.waitUntil alone (30s cap) cannot do for a 40s run. When the run settles,
+// a meta refresh sends the browser to /runs. waitUntil still covers a closed tab.
 async function startRunNow(request, env, ctx, deps, url) {
   // CSRF guard: the form must come from this host.
   if (parseUrl(request.headers.get("origin"))?.host !== url.host) return text("Forbidden", 403);
   const redirect = new Response(null, { status: 303, headers: { location: `${url.origin}/runs` } });
   if (typeof deps?.run !== "function") return redirect;
   if (runInProgress(await latestRun(env.DB))) return redirect;
-  const pending = deps.run().catch((err) => {
-    console.error(`Run now failed: ${err?.message ?? err}`);
+
+  const encoder = new TextEncoder();
+  let controller;
+  const body = new ReadableStream({
+    start(c) {
+      controller = c;
+      c.enqueue(encoder.encode(layoutStart("Running") + RUNNING_PAGE_BODY));
+    },
   });
-  // waitUntil alone is cancelled 30s after the response and a run takes about 40s,
-  // so the request waits. waitUntil still covers a tab closed mid-run.
+  const pending = deps
+    .run()
+    .catch((err) => {
+      console.error(`Run now failed: ${err?.message ?? err}`);
+    })
+    .then(() => {
+      // The tab may be gone; a cancelled stream throws on enqueue, which is fine.
+      try {
+        controller.enqueue(encoder.encode(RUNNING_PAGE_DONE + LAYOUT_END));
+        controller.close();
+      } catch {}
+    });
   if (typeof ctx?.waitUntil === "function") ctx.waitUntil(pending);
-  await pending;
-  return redirect;
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": CSP,
+      // no-transform stops Cloudflare compressing (and so buffering) the stream.
+      "cache-control": "no-store, no-transform",
+    },
+  });
 }
 
 export async function handleRequest(request, env, ctx, deps = {}) {

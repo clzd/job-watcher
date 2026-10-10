@@ -83,3 +83,7 @@ All tests are plain `node:test` with the existing fakes in `test/helpers.js`.
 
 - `README.md` and `CLAUDE.md`: one line each noting the button, that it is a real run, and the 7 calls per press.
 - `docs/handoff/2026-10-09-dashboard.md`: add the route to the route list.
+
+## Amendment 2026-10-10: Running page
+
+After the waiting redirect shipped, the browser showed nothing for 40 seconds and Anthony refreshed, cancelling the run. `POST /runs/now` now answers 200 at once with a streamed "Running" page (spinner, "takes about 40 seconds, leave this page open") and keeps the body open until the run settles, then writes `<meta http-equiv="refresh" content="0;url=/runs">` and closes. Cloudflare keeps the Worker alive while the body streams. The response sets `cache-control: no-store, no-transform` so Cloudflare does not compress, and so buffer, the stream. The no-run cases (403, in-progress 303, GET 303, D1 500) are unchanged. The Run now button gets hover and pressed styles.

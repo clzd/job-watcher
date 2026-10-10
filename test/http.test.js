@@ -224,13 +224,46 @@ async function runningRowStarted(db, isoStartedAt) {
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
 
-test("POST /runs/now runs the search, waits for it, and redirects to /runs", async () => {
+// Reads a streamed body chunk by chunk, so a test can look at the first chunk
+// before the run has finished.
+async function readChunks(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const first = await reader.read();
+  const head = decoder.decode(first.value);
+  return {
+    head,
+    async rest() {
+      let tail = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return tail;
+        tail += decoder.decode(value);
+      }
+    },
+    cancel: () => reader.cancel(),
+  };
+}
+
+test("POST /runs/now answers at once with a Running page, then refreshes to /runs when the run finishes", async () => {
   const { res, waited, calls } = await runNow();
-  assert.equal(res.status, 303);
-  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
-  assert.equal(calls.length, 1, "run finished before the response");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(res.headers.get("cache-control"), "no-store, no-transform");
+  assert.ok(res.headers.get("content-security-policy").includes("default-src 'none'"));
   assert.equal(waited.length, 1);
-  await waited[0];
+
+  const chunks = await readChunks(res);
+  assert.ok(chunks.head.includes("Running the job search"), "first chunk is the Running page");
+  assert.ok(chunks.head.includes("Leave this page open"));
+  assert.ok(!chunks.head.includes('http-equiv="refresh"'), "no refresh before the run finishes");
+  assert.equal(calls.length, 0, "the page arrives before the run finishes");
+
+  const tail = await chunks.rest();
+  assert.equal(calls.length, 1);
+  assert.ok(tail.includes('<meta http-equiv="refresh" content="0;url=/runs">'));
+  assert.ok(tail.includes('<a href="/runs">Done. See the result.</a>'));
+  assert.ok(tail.trimEnd().endsWith("</html>"));
 });
 
 test("POST /runs/now rejects a missing or foreign Origin with 403 and starts nothing", async () => {
@@ -255,7 +288,9 @@ test("POST /runs/now skips the start when a running row is under 10 minutes old"
 test("POST /runs/now starts a run when the running row is over 10 minutes old", async () => {
   const db = fakeDb();
   await runningRowStarted(db, minutesAgo(11));
-  const { waited, calls } = await runNow({ db });
+  const { res, waited, calls } = await runNow({ db });
+  assert.equal(res.status, 200);
+  await res.text();
   assert.equal(calls.length, 1);
   assert.equal(waited.length, 1);
 });
@@ -264,7 +299,9 @@ test("POST /runs/now starts a run when the latest row is finished", async () => 
   const db = fakeDb();
   const id = await startRun(db);
   await finishRun(id, { outcome: "failed", error: "All Adzuna searches failed" }, db);
-  const { waited, calls } = await runNow({ db });
+  const { res, waited, calls } = await runNow({ db });
+  assert.equal(res.status, 200);
+  await res.text();
   assert.equal(calls.length, 1);
   assert.equal(waited.length, 1);
 });
@@ -273,7 +310,8 @@ test("POST /runs/now treats a running row with an unparseable started_at as not 
   const db = fakeDb();
   await runningRowStarted(db, "not a date");
   const { res, waited, calls } = await runNow({ db });
-  assert.equal(res.status, 303);
+  assert.equal(res.status, 200);
+  await res.text();
   assert.equal(calls.length, 1);
   assert.equal(waited.length, 1);
 });
@@ -287,21 +325,48 @@ test("POST /runs/now treats a running row started in the future as in progress",
   assert.equal(calls.length, 0);
 });
 
-test("POST /runs/now logs a rejected run and the waitUntil promise resolves", async (t) => {
+test("POST /runs/now logs a rejected run and still refreshes to /runs", async (t) => {
   const errors = [];
   t.mock.method(console, "error", (msg) => errors.push(msg));
-  const { res, waited } = await runNow({ run: async () => { throw new Error("All Adzuna searches failed"); } });
-  assert.equal(res.status, 303);
-  assert.equal(errors.length, 1, "logged before the response");
-  assert.match(errors[0], /Run now failed: All Adzuna searches failed/);
-  assert.equal(waited.length, 1);
+  const { res, waited } = await runNow({
+    run: async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      throw new Error("All Adzuna searches failed");
+    },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(errors.length, 0, "nothing logged before the run settles");
+  const html = await res.text();
+  assert.ok(html.includes('<meta http-equiv="refresh" content="0;url=/runs">'));
   await waited[0];
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /Run now failed: All Adzuna searches failed/);
 });
 
-test("POST /runs/now still starts the run when ctx has no waitUntil", async () => {
+test("POST /runs/now still runs and finishes the page when ctx has no waitUntil", async () => {
   const { res, calls } = await runNow({ waitUntil: null });
-  assert.equal(res.status, 303);
+  assert.equal(res.status, 200);
+  const html = await res.text();
   assert.equal(calls.length, 1);
+  assert.ok(html.includes('<meta http-equiv="refresh" content="0;url=/runs">'));
+});
+
+test("POST /runs/now keeps running when the tab closes mid-run", async (t) => {
+  const errors = [];
+  t.mock.method(console, "error", (msg) => errors.push(msg));
+  const { res, waited, calls } = await runNow();
+  const chunks = await readChunks(res);
+  await chunks.cancel();
+  await waited[0];
+  assert.equal(calls.length, 1, "the run finished after the client went away");
+  assert.equal(errors.length, 0, "closing the stream late does not log or throw");
+});
+
+test("GET /runs is still a complete page after the layout split", async () => {
+  const html = await (await get("/runs", { DB: fakeDb() })).text();
+  assert.ok(html.startsWith("<!doctype html>"));
+  assert.ok(html.includes("<main>\n"));
+  assert.ok(html.trimEnd().endsWith("</html>"));
 });
 
 test("POST /runs/now without deps.run redirects and starts nothing", async () => {
