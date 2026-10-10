@@ -1,12 +1,21 @@
 # job-watcher
 
-job-watcher is a Cloudflare Worker that runs four times a day and searches the Adzuna jobs API for seven web platform and digital experience manager titles. It keeps only remote or Florida postings that are not interns or juniors and that it has not sent before, remembering sent ids in Workers KV for 60 days. When there is something new it sends one Telegram message with title, company, location, salary when listed, and a link.
+job-watcher is a Cloudflare Worker that runs four times a day and searches the Adzuna jobs API for seven web platform and digital experience manager titles. It keeps only remote or Florida postings that are not interns or juniors and that it has not sent before, remembering sent ids in Workers KV for 60 days. When there is something new it sends one Telegram message with title, company, location, salary when listed, and a link. Each run and every sent job is also recorded in a D1 database and shown on a private dashboard.
 
 ## Setup
 
 One time, create the KV namespace and paste the printed id into `wrangler.toml` under `[[kv_namespaces]]`:
 
     npx wrangler kv namespace create SEEN_JOBS
+
+One time, create the D1 database (already done; its id is in `wrangler.toml` under `[[d1_databases]]`):
+
+    npx wrangler d1 create job-watcher
+
+Apply the database migrations, locally and in production. Run these again after adding any new file in `migrations/`:
+
+    npx wrangler d1 migrations apply job-watcher --local
+    npx wrangler d1 migrations apply job-watcher --remote
 
 Set the four secrets (each command prompts for the value):
 
@@ -19,11 +28,22 @@ Set the four secrets (each command prompts for the value):
 
     npx wrangler deploy
 
+## Dashboard
+
+https://job-watcher.anthony-calzadilla.workers.dev
+
+It sits behind Cloudflare Access, so it asks you to sign in with your Cloudflare login first. It has two pages:
+
+- Jobs (`/`): every job sent to Telegram, filterable by status, with buttons to mark each one new, applied, or dismissed.
+- Runs (`/runs`): the last 50 cron runs with their counts and outcome.
+
 ## Run locally
 
 Copy `.dev.vars.example` to `.dev.vars` and fill in the values, then:
 
     npx wrangler dev --test-scheduled
+
+The dashboard is at http://localhost:8787 (the `[access.dev]` block in `wrangler.toml` stands in for the Access login).
 
 In a second terminal, trigger the cron by hand:
 
@@ -31,7 +51,7 @@ In a second terminal, trigger the cron by hand:
 
 ## Test
 
-Needs Node 22 or newer.
+Needs Node 22.13 or newer.
 
     npm test
 
