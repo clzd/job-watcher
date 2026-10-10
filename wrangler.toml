@@ -29,3 +29,8 @@ enabled = true
 # Traces would record the Adzuna and Telegram URLs, which carry secrets.
 [observability.traces]
 enabled = false
+
+[vars]
+# Company feed requests per run. 35 fits the free plan's 50 outbound requests next to
+# 7 Adzuna calls and a few Telegram parts. 0 turns the feeds off without a deploy of code.
+ATS_BUDGET = "35"

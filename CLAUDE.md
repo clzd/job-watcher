@@ -1,6 +1,6 @@
 # job-watcher
 
-Cloudflare Worker on a cron (`0 */6 * * *`) that searches Adzuna, sends new remote or Florida jobs to Telegram, and serves a D1-backed dashboard.
+Cloudflare Worker on a cron (`0 */6 * * *`) that searches Adzuna plus 20 company career feeds (Greenhouse, Workday), sends new remote or Florida jobs to Telegram, and serves a D1-backed dashboard.
 
 ## Commands
 - `npm test` runs `node --disable-warning=ExperimentalWarning --test "test/*.test.js"`. Needs Node 22.13+ (tests use `node:sqlite`). No framework, no build step.
@@ -18,3 +18,6 @@ Cloudflare Worker on a cron (`0 */6 * * *`) that searches Adzuna, sends new remo
 - `src/store.js` is the only module with SQL. `DB` is the D1 binding.
 - Dashboard auth is Cloudflare Access on the Worker. `ctx.access` is the backstop. `[access.dev]` in `wrangler.toml` fakes it for `wrangler dev`.
 - Title filter is whole-word (`/\b(intern|junior)\b/i`), so "International" is kept. `.claude/settings.json` has a PostToolUse hook that runs `npm test` after every Edit or Write.
+- Company feeds come from `src/companies.json`: 15 Greenhouse boards and 5 Workday tenants, all fetched every run. A unit is one outbound request: one per Greenhouse board, one per phrase in `WORKDAY_SEARCHES` per Workday tenant. The list must stay at or under 35 units (a test enforces it) because the free plan allows 50 outbound requests per invocation and Adzuna uses 7. KV and D1 calls do not count. `ATS_BUDGET` in `wrangler.toml` is the runtime guard; tests set it to "0". The full 178-company research list is `docs/companies-verified-2026-10-10.json`.
+- Only `greenhouse` and `workday` have fetchers (`src/ats.js`). ATS jobs pass `passesAtsTitleFilter` (web, website, digital experience, optimizely, wordpress, cms, cro, ...) before the usual filters, because feeds return every job a company has open. Job ids are `greenhouse:<slug>:<id>` and `workday:<tenant>:<req id>`.
+- A Workday phrase search returns newest first, 20 per request, no description. Single words like "web" match thousands of postings; keep phrases two words.

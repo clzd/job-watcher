@@ -3,10 +3,19 @@ import assert from "node:assert/strict";
 import worker, { run, SEARCH_TERMS } from "../src/index.js";
 import { fakeKv, fakeDb } from "./helpers.js";
 import { formatMessages } from "../src/telegram.js";
+import { WORKDAY_SEARCHES } from "../src/companies.js";
+import { latestRun } from "../src/store.js";
 
-// adzunaStatus and telegramStatus may each be a number or a function of the 0-based call index.
-function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = {}) {
-  const calls = { adzuna: [], telegram: [] };
+// adzunaStatus, telegramStatus and greenhouseStatus may each be a number or a function of the 0-based call index.
+function fakeFetch({
+  results = [],
+  telegramStatus = 200,
+  adzunaStatus = 200,
+  greenhouseJobs = [],
+  greenhouseStatus = 200,
+  workdayPostings = [],
+} = {}) {
+  const calls = { adzuna: [], telegram: [], greenhouse: [], workday: [] };
   globalThis.fetch = async (url, options) => {
     const u = String(url);
     if (u.startsWith("https://api.adzuna.com/")) {
@@ -19,6 +28,16 @@ function fakeFetch({ results = [], telegramStatus = 200, adzunaStatus = 200 } = 
       const status = typeof telegramStatus === "function" ? telegramStatus(calls.telegram.length) : telegramStatus;
       calls.telegram.push(JSON.parse(options.body));
       return new Response(status === 200 ? '{"ok":true}' : '{"ok":false}', { status });
+    }
+    if (u.startsWith("https://boards-api.greenhouse.io/")) {
+      const status = typeof greenhouseStatus === "function" ? greenhouseStatus(calls.greenhouse.length) : greenhouseStatus;
+      calls.greenhouse.push(u);
+      if (status !== 200) return new Response("server error", { status });
+      return new Response(JSON.stringify({ jobs: greenhouseJobs }), { status: 200 });
+    }
+    if (u.includes("/wday/cxs/")) {
+      calls.workday.push({ url: u, body: JSON.parse(options.body) });
+      return new Response(JSON.stringify({ total: workdayPostings.length, jobPostings: workdayPostings }), { status: 200 });
     }
     throw new Error(`unexpected fetch ${u}`);
   };
@@ -34,6 +53,8 @@ function makeEnv(kv, db = fakeDb()) {
     SEEN_JOBS: kv,
     DB: db,
     SEARCH_GAP_MS: "0",
+    ATS_GAP_MS: "0",
+    ATS_BUDGET: "0",
   };
 }
 
@@ -291,4 +312,128 @@ test("fetch handler serves the dashboard", async () => {
   const res = await worker.fetch(new Request("https://jobs.example/runs"), makeEnv(fakeKv()), { access: { aud: "test" }, waitUntil() {} });
   assert.equal(res.status, 200);
   assert.ok((await res.text()).includes("No runs yet"));
+});
+
+const netlify = { name: "Netlify", group: "saas", ats: "greenhouse", slug: "netlify" };
+const wpengine = {
+  name: "WP Engine", group: "saas", ats: "workday",
+  host: "wpengine.wd1.myworkdayjobs.com", tenant: "wpengine", site: "WP_Engine",
+};
+// 1 Greenhouse unit + 4 Workday units = 5 units in this order:
+// [netlify, wpengine "website manager", wpengine "digital experience", wpengine "optimizely", wpengine "wordpress"]
+const twoCompanies = [netlify, wpengine];
+
+const webContentPosting = {
+  id: 1, title: "Manager, Web Content", location: { name: "Remote" },
+  absolute_url: "https://job-boards.greenhouse.io/netlify/jobs/1", content: "<p>x</p>",
+};
+const successPosting = {
+  id: 2, title: "Customer Success Associate", location: { name: "Remote" },
+  absolute_url: "https://job-boards.greenhouse.io/netlify/jobs/2",
+};
+const miamiWebsiteManager = {
+  title: "Website Manager", externalPath: "/job/Miami-FL/Website-Manager_JR1",
+  locationsText: "Miami, FL", postedOn: "Posted Today", bulletFields: ["JR1"],
+};
+
+test("run fetches every feed after Adzuna, sends the web jobs that pass the filters, and records the counts", async () => {
+  const calls = fakeFetch({
+    results: [],
+    greenhouseJobs: [webContentPosting, successPosting],
+    workdayPostings: [miamiWebsiteManager],
+  });
+  const kv = fakeKv();
+  const env = { ...makeEnv(kv), ATS_BUDGET: "35" };
+
+  await run(env, { companies: twoCompanies });
+
+  assert.equal(calls.adzuna.length, 7);
+  assert.equal(calls.greenhouse.length, 1);
+  assert.deepEqual(calls.workday.map((c) => c.body.searchText), WORKDAY_SEARCHES);
+  assert.equal(calls.telegram.length, 1);
+  const text = calls.telegram[0].text;
+  assert.ok(text.startsWith("New jobs (2)\n\n"), text);
+  assert.ok(text.includes("Manager, Web Content\nNetlify\nRemote\nhttps://job-boards.greenhouse.io/netlify/jobs/1"), text);
+  assert.ok(!text.includes("Customer Success"), "no web signal, filtered out");
+  assert.equal(
+    text.split("https://wpengine.wd1.myworkdayjobs.com/en-US/WP_Engine/job/Miami-FL/Website-Manager_JR1").length - 1,
+    1,
+    "same Workday posting from four searches listed once",
+  );
+  assert.deepEqual(kv.puts.map((p) => p.key).sort(), ["greenhouse:netlify:1", "workday:wpengine:JR1"]);
+  const row = await latestRun(env.DB);
+  assert.equal(row.outcome, "ok");
+  assert.equal(row.ats_units, 5);
+  assert.equal(row.ats_failed, 0);
+  assert.equal(row.candidates, 2);
+});
+
+test("run makes no feed requests when ATS_BUDGET is 0", async () => {
+  const calls = fakeFetch({ results: [remoteJob] });
+  const kv = fakeKv();
+  const env = makeEnv(kv);
+  await run(env, { companies: twoCompanies });
+  assert.equal(calls.greenhouse.length, 0);
+  assert.equal(calls.workday.length, 0);
+  assert.equal(calls.telegram.length, 1, "Adzuna path unchanged");
+  const row = await latestRun(env.DB);
+  assert.equal(row.ats_units, 0);
+  assert.equal(row.ats_failed, 0);
+});
+
+test("ATS_BUDGET truncates the unit list in file order", async () => {
+  const calls = fakeFetch({ results: [] });
+  const kv = fakeKv();
+  await run({ ...makeEnv(kv), ATS_BUDGET: "3" }, { companies: twoCompanies });
+  assert.equal(calls.greenhouse.length, 1);
+  assert.deepEqual(calls.workday.map((c) => c.body.searchText), WORKDAY_SEARCHES.slice(0, 2));
+});
+
+test("run keeps going when Adzuna is down but a feed answers", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ adzunaStatus: 500, greenhouseJobs: [webContentPosting] });
+  const kv = fakeKv();
+  const env = { ...makeEnv(kv), ATS_BUDGET: "35" };
+
+  await run(env, { companies: [netlify] });
+
+  assert.equal(calls.telegram.length, 1);
+  const row = await latestRun(env.DB);
+  assert.equal(row.outcome, "ok");
+  assert.equal(row.terms_failed, 7);
+  assert.equal(row.ats_units, 1);
+  assert.equal(row.ats_failed, 0);
+});
+
+test("run throws when Adzuna and every feed fail", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ adzunaStatus: 500, greenhouseStatus: 503 });
+  const kv = fakeKv();
+  const env = { ...makeEnv(kv), ATS_BUDGET: "35" };
+
+  await assert.rejects(run(env, { companies: [netlify] }), /All Adzuna searches and ATS feeds failed/);
+
+  assert.equal(calls.greenhouse.length, 1);
+  assert.equal(calls.telegram.length, 0);
+  assert.equal(kv.puts.length, 0);
+  const row = await latestRun(env.DB);
+  assert.equal(row.outcome, "failed");
+  assert.equal(row.ats_units, 1);
+  assert.equal(row.ats_failed, 1);
+});
+
+test("run still sends Adzuna matches when every feed fails, and counts the failures", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = fakeFetch({ results: [remoteJob], greenhouseStatus: 503, workdayPostings: [] });
+  const kv = fakeKv();
+  const env = { ...makeEnv(kv), ATS_BUDGET: "35" };
+
+  await run(env, { companies: [netlify] });
+
+  assert.equal(calls.greenhouse.length, 1);
+  assert.equal(calls.telegram.length, 1);
+  const row = await latestRun(env.DB);
+  assert.equal(row.outcome, "ok");
+  assert.equal(row.ats_units, 1);
+  assert.equal(row.ats_failed, 1);
 });

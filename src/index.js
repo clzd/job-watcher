@@ -1,9 +1,11 @@
 import { fetchSearch } from "./adzuna.js";
-import { passesTitleFilter, passesLocationFilter } from "./filters.js";
+import { passesTitleFilter, passesLocationFilter, passesAtsTitleFilter } from "./filters.js";
 import { findNew, markSeen } from "./seen.js";
 import { formatMessages, send } from "./telegram.js";
 import { startRun, finishRun, saveJobs } from "./store.js";
 import { handleRequest } from "./http.js";
+import { COMPANIES, expandUnits } from "./companies.js";
+import { SUPPORTED_ATS, fetchSlice } from "./ats.js";
 
 // Seven terms. Do not add an eighth: 7 x 4 runs x 31 days = 868 of the 1,000 monthly Adzuna calls.
 export const SEARCH_TERMS = [
@@ -19,6 +21,11 @@ export const SEARCH_TERMS = [
 // Adzuna answers 429 and 503 when several searches land at once, so search one term at a time.
 // env.SEARCH_GAP_MS overrides the pause (tests set it to 0).
 const SEARCH_GAP_MS = 2000;
+
+// Company feed requests per run. The Workers free plan allows 50 outbound requests per
+// invocation: 7 go to Adzuna, 35 here, which leaves 8 Telegram parts. The data test in
+// test/companies.test.js keeps the list at 35 units; this is the runtime guard. 0 disables feeds.
+const ATS_BUDGET = 35;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -41,17 +48,36 @@ function dedupeById(jobs) {
   return [...byId.values()];
 }
 
-export async function run(env) {
+// Fetches every company feed unit (capped by ATS_BUDGET) and keeps the jobs with a web signal
+// in the title. Returns the counts for the run row and the jobs for the candidate list.
+async function searchAts(env, companies) {
+  const budget = Number(env.ATS_BUDGET ?? ATS_BUDGET);
+  const units = expandUnits(companies, SUPPORTED_ATS).slice(0, Math.max(0, budget));
+  if (units.length === 0) return { units: 0, failed: 0, jobs: [] };
+
+  const results = await fetchSlice(units, env);
+  const failed = results.filter((r) => r === null).length;
+  const jobs = results.flatMap((r) => r ?? []).filter(passesAtsTitleFilter);
+  return { units: units.length, failed, jobs };
+}
+
+export async function run(env, deps = {}) {
+  const companies = deps.companies ?? COMPANIES;
   const runId = await startRun(env.DB);
   // Counts known so far, recorded on the run row whether the run succeeds or fails.
   const counts = {};
   try {
     const perTerm = await searchAll(env);
     counts.termsFailed = perTerm.filter((results) => results === null).length;
-    if (counts.termsFailed === perTerm.length) {
-      throw new Error("All Adzuna searches failed");
+
+    const ats = await searchAts(env, companies);
+    counts.atsUnits = ats.units;
+    counts.atsFailed = ats.failed;
+
+    if (counts.termsFailed === perTerm.length && ats.failed === ats.units) {
+      throw new Error(ats.units > 0 ? "All Adzuna searches and ATS feeds failed" : "All Adzuna searches failed");
     }
-    const candidates = dedupeById(perTerm.flatMap((results) => results ?? []))
+    const candidates = dedupeById([...perTerm.flatMap((results) => results ?? []), ...ats.jobs])
       .filter(passesTitleFilter)
       .filter(passesLocationFilter);
     counts.candidates = candidates.length;
