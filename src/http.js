@@ -107,8 +107,9 @@ function filterLinks(counts, status) {
 }
 
 function jobBlock(job) {
-  const title = job.url
-    ? `<a href="${escapeHtml(job.url)}" target="_blank" rel="noopener">${escapeHtml(job.title)}</a>`
+  // Adzuna data can contain anything, so only http(s) urls become links.
+  const title = /^https?:\/\//i.test(job.url ?? "")
+    ?`<a href="${escapeHtml(job.url)}" target="_blank" rel="noopener">${escapeHtml(job.title)}</a>`
     : escapeHtml(job.title);
   const details = [job.company, job.location, salaryLine(job)]
     .filter((part) => part !== null && part !== undefined && part !== "")

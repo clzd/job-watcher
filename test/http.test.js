@@ -42,6 +42,14 @@ test("GET / shows only new jobs by default, escapes titles, and links the url", 
   assert.ok(html.includes("No runs yet"));
 });
 
+test("GET / does not link a non-http job url", async () => {
+  const db = fakeDb();
+  await saveJobs([{ id: 1, title: "Sneaky Job", redirect_url: "javascript:alert(1)" }], 1, db);
+  const html = await (await get("/", { DB: db })).text();
+  assert.ok(html.includes("Sneaky Job"));
+  assert.ok(!html.includes("javascript:"));
+});
+
 test("GET /?status=all shows every job and ?status=bogus falls back to new", async () => {
   const db = fakeDb();
   await saveJobs([{ id: 1, title: "New One" }, { id: 2, title: "Applied One" }], 1, db);
