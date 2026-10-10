@@ -85,6 +85,6 @@ export default {
     await run(env);
   },
   async fetch(request, env, ctx) {
-    return handleRequest(request, env, ctx);
+    return handleRequest(request, env, ctx, { run: () => run(env) });
   },
 };

@@ -199,6 +199,25 @@ test("scheduled handler awaits run", async () => {
   assert.equal(calls.telegram.length, 1);
 });
 
+test("fetch handler passes run through to the dashboard", async () => {
+  const calls = fakeFetch({ results: [remoteJob] });
+  const kv = fakeKv();
+  const waited = [];
+  const ctx = { access: { aud: "test" }, waitUntil: (p) => waited.push(p) };
+  const req = new Request("https://jobs.example/runs/now", {
+    method: "POST",
+    headers: { origin: "https://jobs.example" },
+    body: new URLSearchParams(),
+  });
+  const res = await worker.fetch(req, makeEnv(kv), ctx);
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "https://jobs.example/runs");
+  assert.equal(waited.length, 1);
+  await waited[0];
+  assert.equal(calls.adzuna.length, 7, "run reached Adzuna through the dashboard");
+  assert.equal(calls.telegram.length, 1);
+});
+
 test("a clean run records an ok run row and one job row per sent job", async () => {
   fakeFetch({ results: [remoteJob, texasJob, internJob] });
   const db = fakeDb();

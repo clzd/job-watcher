@@ -181,7 +181,7 @@ ${runs.map(runRow).join("\n")}
   );
 }
 
-async function route(request, env) {
+async function route(request, env, ctx, deps) {
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/") {
     const q = url.searchParams.get("status");
@@ -238,10 +238,10 @@ async function updateStatus(request, env, url, rawId) {
   return new Response(null, { status: 303, headers: { location } });
 }
 
-export async function handleRequest(request, env, ctx) {
+export async function handleRequest(request, env, ctx, deps = {}) {
   if (!ctx?.access) return text("Access required", 401);
   try {
-    return await route(request, env);
+    return await route(request, env, ctx, deps);
   } catch (err) {
     console.error(`Dashboard request failed: ${err?.message ?? err}`);
     return text("Database error", 500);
