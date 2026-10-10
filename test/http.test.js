@@ -395,8 +395,8 @@ test("POST /runs/now returns 500 when D1 is down", async (t) => {
   assert.equal(await res.text(), "Database error");
 });
 
-const RUN_NOW_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now (about 40 seconds, leave the page open)</button></form>';
-const RUNNING_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit" disabled>Running, about 40 seconds</button></form>';
+const RUN_NOW_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit">Run now (about 90 seconds, leave the page open)</button></form>';
+const RUNNING_FORM = '<form method="post" action="/runs/now" class="run-now"><button type="submit" disabled>Running, about 90 seconds</button></form>';
 
 test("GET /runs renders the enabled Run now form in the empty and finished states", async () => {
   const empty = await (await get("/runs", { DB: fakeDb() })).text();

@@ -29,7 +29,7 @@ test("fetchUnit dispatches on the company's ATS and answers null for one it cann
   assert.deepEqual(await fetchUnit(workday), []);
   assert.equal(await fetchUnit(oracle), null);
   assert.deepEqual(urls, [
-    "https://boards-api.greenhouse.io/v1/boards/netlify/jobs?content=true",
+    "https://boards-api.greenhouse.io/v1/boards/netlify/jobs",
     "https://wpengine.wd1.myworkdayjobs.com/wday/cxs/wpengine/WP_Engine/jobs",
   ]);
 });

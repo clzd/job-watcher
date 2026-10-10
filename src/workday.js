@@ -25,7 +25,8 @@ export function normalizeWorkday(posting, company) {
     id: `workday:${company.tenant}:${requisitionId(posting)}`,
     title: posting.title ?? "Untitled",
     company: { display_name: company.name },
-    location: { display_name: posting.locationsText ?? "", area: [] },
+    // Accenture's postings carry no locationsText; their location is bulletFields[1].
+    location: { display_name: posting.locationsText ?? posting.bulletFields?.[1] ?? "", area: [] },
     redirect_url: workdayJobUrl(company, posting.externalPath ?? ""),
     description: null,
     source: "workday",
@@ -40,6 +41,7 @@ export async function fetchWorkday(unit) {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: search ?? "" }),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
       console.error(`Workday returned ${res.status} for ${company.tenant}`);

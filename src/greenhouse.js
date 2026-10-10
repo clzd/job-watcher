@@ -1,7 +1,8 @@
 const BOARDS = "https://boards-api.greenhouse.io/v1/boards";
 
+// No ?content=true: with content the 15 boards total about 50 MB per run, nothing reads the description, and the free plan allows 10 ms CPU per invocation.
 export function greenhouseUrl(slug) {
-  return `${BOARDS}/${encodeURIComponent(slug)}/jobs?content=true`;
+  return `${BOARDS}/${encodeURIComponent(slug)}/jobs`;
 }
 
 // Adzuna job shape, so filters, Telegram, KV and D1 need no changes.
@@ -12,7 +13,7 @@ export function normalizeGreenhouse(job, company) {
     company: { display_name: company.name },
     location: { display_name: job.location?.name ?? "", area: [] },
     redirect_url: job.absolute_url ?? "",
-    description: typeof job.content === "string" ? job.content : null,
+    description: null,
     source: "greenhouse",
   };
 }
@@ -21,7 +22,7 @@ export function normalizeGreenhouse(job, company) {
 export async function fetchGreenhouse(unit) {
   const { company } = unit;
   try {
-    const res = await fetch(greenhouseUrl(company.slug));
+    const res = await fetch(greenhouseUrl(company.slug), { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) {
       console.error(`Greenhouse returned ${res.status} for ${company.slug}`);
       return null;

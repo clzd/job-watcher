@@ -187,13 +187,13 @@ function runRow(run) {
   return `<tr${cls}>${cells.join("")}</tr>`;
 }
 
-const RUN_NOW_LABEL = "Run now (about 40 seconds, leave the page open)";
-const RUNNING_LABEL = "Running, about 40 seconds";
+const RUN_NOW_LABEL = "Run now (about 90 seconds, leave the page open)";
+const RUNNING_LABEL = "Running, about 90 seconds";
 
 const RUNNING_PAGE_BODY = `<section class="running" role="status">
 <div class="spinner" aria-hidden="true"></div>
 <h1>Running the job search</h1>
-<p>This takes about 40 seconds. Leave this page open.</p>
+<p>This takes about 90 seconds. Leave this page open.</p>
 <p>The Runs page opens on its own when it finishes.</p>
 </section>`;
 
@@ -297,7 +297,7 @@ function runInProgress(latest) {
 
 // Answers at once with a "Running" page and keeps the body open while the run
 // works. Cloudflare keeps a Worker alive while it streams a response, which
-// ctx.waitUntil alone (30s cap) cannot do for a 40s run. When the run settles,
+// ctx.waitUntil alone (30s cap) cannot do for a 90s run. When the run settles,
 // a meta refresh sends the browser to /runs. waitUntil still covers a closed tab.
 async function startRunNow(request, env, ctx, deps, url) {
   // CSRF guard: the form must come from this host.

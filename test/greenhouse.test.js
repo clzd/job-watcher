@@ -26,8 +26,8 @@ function fakeFetch(status, body) {
   return calls;
 }
 
-test("greenhouseUrl asks the board API for every job with content", () => {
-  assert.equal(greenhouseUrl("netlify"), "https://boards-api.greenhouse.io/v1/boards/netlify/jobs?content=true");
+test("greenhouseUrl asks the board API for every job, without content", () => {
+  assert.equal(greenhouseUrl("netlify"), "https://boards-api.greenhouse.io/v1/boards/netlify/jobs");
 });
 
 test("normalizeGreenhouse maps a posting to the Adzuna job shape with a namespaced id", () => {
@@ -37,7 +37,7 @@ test("normalizeGreenhouse maps a posting to the Adzuna job shape with a namespac
     company: { display_name: "Netlify" },
     location: { display_name: "Remote", area: [] },
     redirect_url: "https://job-boards.greenhouse.io/netlify/jobs/8806100002",
-    description: "<p>Own netlify.com.</p>",
+    description: null,
     source: "greenhouse",
   });
 });
@@ -58,6 +58,12 @@ test("fetchGreenhouse GETs the board and returns normalized jobs", async () => {
   assert.equal(calls[0].url, greenhouseUrl("netlify"));
   assert.equal(calls[0].options?.method ?? "GET", "GET");
   assert.deepEqual(jobs.map((j) => j.id), ["greenhouse:netlify:8806100002", "greenhouse:netlify:2"]);
+});
+
+test("fetchGreenhouse passes an abort signal so a hung board times out", async () => {
+  const calls = fakeFetch(200, { jobs: [] });
+  await fetchGreenhouse(unit);
+  assert.ok(calls[0].options.signal instanceof AbortSignal);
 });
 
 test("fetchGreenhouse returns an empty array for a board with no open jobs", async () => {

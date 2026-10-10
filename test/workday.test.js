@@ -70,6 +70,12 @@ test("normalizeWorkday falls back to the path suffix, then the whole path, for t
   assert.notEqual(bare.id, "workday:wpengine:");
 });
 
+test("normalizeWorkday falls back to bulletFields[1] for the location when locationsText is missing", () => {
+  const accenture = normalizeWorkday({ title: "X", externalPath: "/job/London/X_R1", bulletFields: ["R1", "London"] }, wpengine);
+  assert.equal(accenture.location.display_name, "London");
+  assert.equal(normalizeWorkday({}, wpengine).location.display_name, "");
+});
+
 test("fetchWorkday POSTs the search phrase as JSON and returns normalized jobs", async () => {
   const calls = fakeFetch(200, { total: 1, jobPostings: [posting] });
   const jobs = await fetchWorkday(unit);
@@ -80,6 +86,12 @@ test("fetchWorkday POSTs the search phrase as JSON and returns normalized jobs",
   assert.equal(calls[0].options.headers.accept, "application/json");
   assert.deepEqual(JSON.parse(calls[0].options.body), { appliedFacets: {}, limit: 20, offset: 0, searchText: "website manager" });
   assert.deepEqual(jobs.map((j) => j.id), ["workday:wpengine:JR102868"]);
+});
+
+test("fetchWorkday passes an abort signal so a hung tenant times out", async () => {
+  const calls = fakeFetch(200, { total: 0, jobPostings: [] });
+  await fetchWorkday(unit);
+  assert.ok(calls[0].options.signal instanceof AbortSignal);
 });
 
 test("fetchWorkday treats a phrase with no hits as an empty result, not a failure", async () => {
