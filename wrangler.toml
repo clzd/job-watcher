@@ -1,7 +1,8 @@
 name = "job-watcher"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
-workers_dev = false
+workers_dev = true
+preview_urls = false
 
 [triggers]
 crons = ["0 */6 * * *"]
@@ -9,6 +10,18 @@ crons = ["0 */6 * * *"]
 [[kv_namespaces]]
 binding = "SEEN_JOBS"
 id = "7de4261c599d4877bb15a4af795d129d"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "job-watcher"
+database_id = "511c1f46-4381-439d-840c-45b9696ae154"
+
+# Lets wrangler dev populate ctx.access so the dashboard works locally. Ignored in production.
+[access.dev]
+aud = "9ae4158bb63c126a6bb4d299888e0add8d2ce8bfd49443188dad612524c36f5a"
+
+  [access.dev.identity]
+  email = "anthony.calzadilla@gmail.com"
 
 [observability]
 enabled = true
