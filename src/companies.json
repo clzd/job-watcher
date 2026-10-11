@@ -7,27 +7,6 @@
   ],
   "companies": [
     {
-      "name": "Datadog",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "datadog",
-      "fit": "Principal CRO and Web Analyst (NYC); Web Content Engineering & AI Visibility Lead"
-    },
-    {
-      "name": "Stripe",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "stripe",
-      "fit": "Full Stack Engineer, Web Presence and Platform (US Remote)"
-    },
-    {
-      "name": "Databricks",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "databricks",
-      "fit": "Director, Web Marketing (US)"
-    },
-    {
       "name": "Calendly",
       "group": "saas",
       "ats": "greenhouse",
@@ -42,32 +21,11 @@
       "fit": "Sr. Director of Web Strategy & Experience (SF)"
     },
     {
-      "name": "Figma",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "figma",
-      "fit": "Marketing Engineer; Brand Designer, Web"
-    },
-    {
       "name": "Asana",
       "group": "saas",
       "ats": "greenhouse",
       "slug": "asana",
       "fit": "Sr. Manager, Web Strategy (Vancouver)"
-    },
-    {
-      "name": "DoorDash",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "doordashusa",
-      "fit": "Marketing Technology roles, Miami listed"
-    },
-    {
-      "name": "Cloudflare",
-      "group": "saas",
-      "ats": "greenhouse",
-      "slug": "cloudflare",
-      "fit": null
     },
     {
       "name": "Webflow",
@@ -113,15 +71,6 @@
       "fit": "Head of Experimentation (Remote US)"
     },
     {
-      "name": "Zoom",
-      "group": "optimizely",
-      "ats": "workday",
-      "host": "zoom.wd5.myworkdayjobs.com",
-      "tenant": "zoom",
-      "site": "Zoom",
-      "fit": "Digital Experience Specialist (Remote US)"
-    },
-    {
       "name": "AutoNation",
       "group": "florida",
       "location": "Fort Lauderdale",
@@ -150,15 +99,6 @@
       "tenant": "seminolehardrock",
       "site": "seminolehardrockcareers",
       "fit": "Regional Director, Paid Digital Marketing; Senior Frontend Engineer"
-    },
-    {
-      "name": "Accenture Song",
-      "group": "optimizely",
-      "ats": "workday",
-      "host": "accenture.wd103.myworkdayjobs.com",
-      "tenant": "accenture",
-      "site": "AccentureCareers",
-      "fit": "CRO Manager (Song); CMS Architect; Frontend Developer CRO"
     }
   ]
 }

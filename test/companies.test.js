@@ -48,5 +48,5 @@ test("companies.json entries have what their fetcher needs", () => {
 test("the whole list fits in one run under the free plan's request cap", () => {
   const units = expandUnits(COMPANIES, ["greenhouse", "workday"]);
   assert.ok(units.length <= 35, `${units.length} units; 7 Adzuna + 35 feeds + Telegram parts must stay under 50`);
-  assert.equal(units.length, 35, "15 Greenhouse + 5 Workday x 4 phrases; update this and the spec together");
+  assert.equal(units.length, 21, "9 Greenhouse + 3 Workday x 4 phrases; update this and the spec together");
 });
