@@ -5,7 +5,7 @@ workers_dev = true
 preview_urls = false
 
 [triggers]
-crons = ["0 */6 * * *"]
+crons = []
 
 [[kv_namespaces]]
 binding = "SEEN_JOBS"
